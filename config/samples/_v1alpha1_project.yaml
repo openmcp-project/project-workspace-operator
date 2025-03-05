@@ -1,0 +1,60 @@
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Project
+metadata:
+  name: one
+  annotations:
+    openmcp.cloud/display-name: First Project
+spec:
+  members:
+    # user needed for local development
+    - kind: User
+      name: kubernetes-admin
+      roles:
+        - admin
+    - kind: User
+      name: valentin.gerlach@sap.com
+      roles:
+        - admin
+    - kind: User
+      name: johannes.aubart@sap.com
+      roles:
+        - view
+    - kind: User
+      name: maximilian.braun@sap.com
+      roles:
+        - view
+---
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Project
+metadata:
+  name: two
+  annotations:
+    openmcp.cloud/display-name: Second Project
+spec:
+  members:
+  # user needed for local development
+    # - kind: User
+    #   name: kubernetes-admin
+    #   roles:
+    #     - admin
+    - kind: User
+      name: valentin.gerlach@sap.com
+      roles:
+        - view
+    - kind: User
+      name: johannes.aubart@sap.com
+      roles:
+        - view
+    - kind: User
+      name: maximilian.braun@sap.com
+      roles:
+        - admin
+---
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Project
+metadata:
+  name: three
+  annotations:
+    openmcp.cloud/display-name: Third Project
+spec:
+  members: []
