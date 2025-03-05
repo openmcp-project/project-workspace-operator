@@ -21,10 +21,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Get the common hack files
-        run: |
-          git submodule update --init
-
       - name: make tidy
         run: |
           
