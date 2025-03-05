@@ -235,12 +235,6 @@ helm-chart: helm-templates
 	OPERATOR_VERSION=$(shell cat VERSION) envsubst < charts/$(PROJECT_FULL_NAME)/Chart.yaml.tpl > charts/$(PROJECT_FULL_NAME)/Chart.yaml
 	OPERATOR_VERSION=$(shell cat VERSION) envsubst < charts/$(PROJECT_FULL_NAME)/values.yaml.tpl > charts/$(PROJECT_FULL_NAME)/values.yaml
 
-.PHONY: helm-templates
-helm-templates:
-	rm -rf charts/$(PROJECT_FULL_NAME)/templates
-	git clone --depth=1 https://github.tools.sap/cloud-orchestration/operator-helm-templates.git charts/$(PROJECT_FULL_NAME)/templates
-	rm -rf charts/$(PROJECT_FULL_NAME)/templates/.git
-
 ### ------------------------------------ E2E ------------------------------------ ###
 .PHONY: e2e
 e2e: docker-build
