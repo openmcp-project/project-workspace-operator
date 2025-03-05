@@ -12,15 +12,15 @@ spec:
       roles:
         - admin
     - kind: User
-      name: valentin.gerlach@sap.com
+      name: user-1@example.com
       roles:
         - admin
     - kind: User
-      name: johannes.aubart@sap.com
+      name: user-2@example.com
       roles:
         - view
     - kind: User
-      name: maximilian.braun@sap.com
+      name: user-3@example.com
       roles:
         - view
 ---
@@ -38,15 +38,15 @@ spec:
     #   roles:
     #     - admin
     - kind: User
-      name: valentin.gerlach@sap.com
+      name: user-1@example.com
       roles:
         - view
     - kind: User
-      name: johannes.aubart@sap.com
+      name: user-2@example.com
       roles:
         - view
     - kind: User
-      name: maximilian.braun@sap.com
+      name: user-3@example.com
       roles:
         - admin
 ---
