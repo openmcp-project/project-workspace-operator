@@ -1,0 +1,225 @@
+{{ $clustersConfigMountPath := "/var/run/secrets/clusters" }}
+{{ $operatorConfigMountPath := "/var/run/configs/operator" }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "operator.fullname" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  minReadySeconds: {{ .Values.deployment.minReadySeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:  {{ .Values.deployment.maxSurge }}
+      maxUnavailable: {{ .Values.deployment.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        openmcp.cloud/topology: project-workspace-operator
+        openmcp.cloud/topology-ns: {{ .Release.Namespace }}
+        {{- include "operator.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "operator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /project-workspace-operator
+          args:
+            - start
+            - "--metrics-bind-address={{ .Values.metrics.listen.host }}:{{ .Values.metrics.listen.port }}"
+            {{- if .Values.webhooks.listen }}
+            - "--webhooks-bind-address={{ .Values.webhooks.listen.host }}:{{ .Values.webhooks.listen.port }}"
+            {{- end }}
+            {{- if .Values.webhooks.memberOverrides }}
+            - "--use-member-overrides={{ .Values.webhooks.memberOverrides.memberOverridesName }}"
+            {{- end }}
+            {{- if .Values.deployment.leaderElection.enabled }}
+            - --leader-elect
+            - --lease-namespace={{ .Values.deployment.leaderElection.leaseNamespace }}
+            {{- end }}
+            {{- if and .Values.clusters .Values.clusters.crate }}
+            - --crate-cluster={{ $clustersConfigMountPath }}/crate
+            {{- end }}
+            {{- if .Values.config }}
+            - --config={{ $operatorConfigMountPath }}/config.yaml
+            {{- end }}
+            {{- with .Values.manager.args }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.manager.extraArgs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+          {{- if .Values.webhooks.listen }}
+            - name: webhooks-https
+              containerPort: {{ .Values.webhooks.listen.port }}
+              protocol: TCP
+          {{- end }}
+            - name: metrics-http
+              containerPort: {{ .Values.metrics.listen.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          {{- if .Values.clusters  }}
+            - name: clusters
+              mountPath: {{ $clustersConfigMountPath }}
+              readOnly: true
+          {{- end }}
+          {{- if .Values.config }}
+            - name: config
+              mountPath: {{ $operatorConfigMountPath }}
+              readOnly: true
+          {{- end }}
+          {{- if .Values.webhooks.listen }}
+            - name: webhooks-tls
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+          {{- end }}
+          {{- with .Values.manager.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+          {{- with .Values.manager.env }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+      {{- if .Values.webhooks.listen }}
+        - name: webhooks-tls
+          secret:
+            defaultMode: 420
+            secretName: {{ include "operator.fullname" . }}-webhooks-tls
+      {{- end }}
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  
+      {{- if .Values.config }}
+        - name: config
+          secret:
+            defaultMode: 420
+            secretName: {{ include "operator.fullname" . }}-config
+      {{- end }}
+
+      {{- if .Values.clusters }}
+        {{- $clusterOperatorName := include "operator.fullname"  . }}
+        - name: clusters
+          projected:
+            sources:
+              {{- range $cname, $cvalues := .Values.clusters }}
+              {{- if $cvalues.kubeconfig }}
+              - secret:
+                  name: {{ $clusterOperatorName }}-{{ $cname }}-cluster
+                  items:
+                  - key: kubeconfig
+                    path: {{ $cname }}/kubeconfig
+              {{- else }}
+              - secret:
+                  name: {{ $clusterOperatorName }}-{{ $cname }}-cluster
+                  items:
+                  - key: host
+                    path: {{ $cname }}/host
+                  {{- if $cvalues.caData }}
+                  - key: caData
+                    path: {{ $cname }}/ca.crt
+                  {{- end }}
+              - serviceAccountToken:
+                  path: {{ $cname }}/token
+                  expirationSeconds: 7200
+                  audience: {{ $cvalues.audience }}
+              {{- if $cvalues.caConfigMapName }}
+              - configMap:
+                  name: {{ $cvalues.caConfigMapName }}
+                  items:
+                  - key: ca.crt
+                    path: {{ $cname }}/ca.crt
+              {{- end }}
+              {{- end }}
+          {{- end }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.deployment.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: {{ .Values.deployment.topologySpreadConstraints.maxSkew }}
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            openmcp.cloud/topology: project-workspace-operator
+            openmcp.cloud/topology-ns: {{ .Release.Namespace }}
+      - maxSkew: {{ .Values.deployment.topologySpreadConstraints.maxSkew }}
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            openmcp.cloud/topology: project-workspace-operator
+            openmcp.cloud/topology-ns: {{ .Release.Namespace }}
+      {{- end }}

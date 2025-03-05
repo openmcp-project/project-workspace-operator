@@ -1,0 +1,156 @@
+{{- if .Values.init.enabled }}
+
+{{ $clustersConfigMountPath := "/var/run/secrets/clusters" }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "operator.fullname" . }}-init
+  labels:
+    labels:
+      {{- include "operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "operator.fullname" . }}-init
+      labels:
+        {{- include "operator.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "operator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      containers:
+      - name: {{ .Chart.Name }}-init
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - /project-workspace-operator
+        args:
+          - init
+          {{- if .Values.crds.manage }}
+          - "--install-crds"
+          {{- end }}
+          {{- if .Values.webhooks.manage }}
+          - "--install-webhooks"
+          {{- if .Values.webhooks.url }}
+          - "--webhooks-base-url={{ .Values.webhooks.url }}"
+          - "--webhooks-without-ca"
+          {{- end }}
+          {{- end }}
+          {{- if and .Values.clusters .Values.clusters.crate }}
+          - --crate-cluster={{ $clustersConfigMountPath }}/crate
+          {{- end }}
+          {{- with .Values.init.args }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.init.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_SERVICE_ACCOUNT
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.serviceAccountName
+          {{- if .Values.webhooks.manage }}
+          - name: WEBHOOK_SECRET_NAME
+            value: {{ include "operator.fullname" . }}-webhooks-tls
+          - name: WEBHOOK_SECRET_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: WEBHOOK_SERVICE_NAME
+            value: {{ include "operator.fullname" . }}-webhooks
+          - name: WEBHOOK_SERVICE_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- end }}
+        {{- with .Values.init.env }}
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.init.extraEnv }}
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- if .Values.clusters  }}
+        volumeMounts:
+          - name: clusters
+            mountPath: {{ $clustersConfigMountPath }}
+            readOnly: true
+        {{- end }}
+        {{- with .Values.init.volumeMounts }}
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.init.extraVolumeMounts }}
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+     {{- end }}
+
+      volumes:
+      {{- if .Values.webhooks.listen }}
+        - name: webhooks-tls
+          secret:
+            defaultMode: 420
+            secretName: {{ include "operator.fullname" . }}-webhooks-tls
+      {{- end }}
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  
+      {{- if .Values.clusters }}
+        {{- $clusterOperatorName := include "operator.fullname"  . }}
+        - name: clusters
+          projected:
+            sources:
+              {{- range $cname, $cvalues := .Values.clusters }}
+              {{- if $cvalues.kubeconfig }}
+              - secret:
+                  name: {{ $clusterOperatorName }}-{{ $cname }}-cluster
+                  items:
+                  - key: kubeconfig
+                    path: {{ $cname }}/kubeconfig
+              {{- else }}
+              - secret:
+                  name: {{ $clusterOperatorName }}-{{ $cname }}-cluster
+                  items:
+                  - key: host
+                    path: {{ $cname }}/host
+                  {{- if $cvalues.caData }}
+                  - key: caData
+                    path: {{ $cname }}/ca.crt
+                  {{- end }}
+              - serviceAccountToken:
+                  path: {{ $cname }}/token
+                  expirationSeconds: 7200
+                  audience: {{ $cvalues.audience }}
+              {{- if $cvalues.caConfigMapName }}
+              - configMap:
+                  name: {{ $cvalues.caConfigMapName }}
+                  items:
+                  - key: ca.crt
+                    path: {{ $cname }}/ca.crt
+              {{- end }}
+              {{- end }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,100 @@
+apiVersion: authentication.gardener.cloud/v1alpha1
+kind: OpenIDConnect
+metadata:
+  name: openmcp-prev-system
+spec:
+  clientID: openmcp-prev-crate
+  issuerURL: https://oidc.system.cola-prev.shoot.canary.k8s-hana.ondemand.com
+  supportedSigningAlgs:
+  - RS256
+  usernameClaim: sub
+  usernamePrefix: 'openmcp-prev-system:'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: project-workspace-operator
+rules:
+  - apiGroups:
+      - openmcp.cloud
+    resources:
+      - projects
+      - projects/finalizers
+      - projects/status
+      - workspaces
+      - workspaces/finalizers
+      - workspaces/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - "*"
+  - apiGroups:
+      - "rbac.authorization.k8s.io"
+    resources:
+      - clusterrolebindings
+      - clusterroles
+      - rolebindings
+    verbs:
+      - "*"
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs:
+      - "*"
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - "*"
+  # permissions to do leader election.
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - coordination.k8s.io
+    resources:
+    - leases
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - create
+    - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: project-workspace-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: project-workspace-operator
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: openmcp-prev-system:system:serviceaccount:openmcp-system:project-workspace-operator

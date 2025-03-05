@@ -1,0 +1,68 @@
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: dev
+  namespace: project-one
+  annotations:
+    openmcp.cloud/display-name: Development
+spec:
+  members:
+    # user needed for local development
+    # - kind: User
+    #   name: kubernetes-admin
+    #   roles:
+    #     - admin
+    - kind: User
+      name: user-1@example.com
+      roles:
+        - admin
+    - kind: User
+      name: user-2@example.com
+      roles:
+        - view
+---
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: prod
+  namespace: default
+  annotations:
+    openmcp.cloud/display-name: Production
+spec:
+  members:
+    # user needed for local development
+    - kind: User
+      name: kubernetes-admin
+      roles:
+        - admin
+    - kind: User
+      name: user-2@example.com
+      roles:
+        - admin
+---
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: dev
+  namespace: project-two
+  annotations:
+    openmcp.cloud/display-name: Development
+spec:
+  members:
+    # user needed for local development
+    # - kind: User
+    #   name: kubernetes-admin
+    #   roles:
+    #     - admin
+    - kind: User
+      name: user-1@example.com
+      roles:
+        - view
+    - kind: User
+      name: user-2@example.com
+      roles:
+        - view
+    - kind: User
+      name: user-3@example.com
+      roles:
+        - admin

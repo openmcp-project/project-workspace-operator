@@ -1,0 +1,15 @@
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: MemberOverrides
+metadata:
+  name: override1
+spec:
+  memberOverrides:
+    # user needed for local development
+    - kind: User
+      name: kubernetes-admin
+      resources:
+      - kind: project
+        name: two
+      roles:
+        - admin
+    

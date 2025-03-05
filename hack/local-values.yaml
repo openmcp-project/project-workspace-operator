@@ -1,0 +1,48 @@
+fullnameOverride: project-workspace-operator
+
+manager:
+  extraArgs: []
+
+rbac:
+  clusterRole:
+    rules:
+      - apiGroups:
+          - core.openmcp.cloud
+        resources:
+          - projects
+          - projects/finalizers
+          - projects/status
+          - workspaces
+          - workspaces/finalizers
+          - workspaces/status
+          - memberoverrides
+        verbs:
+          - "*"
+      - apiGroups:
+          - ""
+        resources:
+          - namespaces
+        verbs:
+          - "*"
+      - apiGroups:
+          - "rbac.authorization.k8s.io"
+        resources:
+          - clusterrolebindings
+          - clusterroles
+          - rolebindings
+        verbs:
+          - "*"
+webhooks:
+  memberOverrides:
+    memberOverridesName: project-workspace-operator-overrides
+    overrides:
+      - kind: User
+        name: kubernetes-admin
+        resources:
+        - kind: project
+          name: two
+        - kind: workspace
+          name: dev
+        roles:
+        - admin
+        
