@@ -33,8 +33,7 @@ import (
 )
 
 const (
-	controllerName                 = "project-workspace-operator"
-	EnforceChargingTargetLabelFlag = "enforce-charging-target-label"
+	controllerName = "project-workspace-operator"
 )
 
 var (
@@ -253,11 +252,10 @@ func (o *Options) runInit() {
 // The Options struct then contains these as embedded struct and additionally some options that were derived from the raw options (e.g. by loading files or interpreting raw options).
 type rawOptions struct {
 	// controller-runtime stuff
-	MetricsAddr                string
-	EnableLeaderElection       bool
-	LeaseNamespace             string
-	ProbeAddr                  string
-	EnforceChargingTargetLabel bool
+	MetricsAddr          string
+	EnableLeaderElection bool
+	LeaseNamespace       string
+	ProbeAddr            string
 
 	// raw options that need to be evaluated
 	CrateClusterPath           string
@@ -297,7 +295,6 @@ func (o *Options) AddStartFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
 	fs.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&o.EnableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	fs.StringVar(&o.LeaseNamespace, "lease-namespace", "default", "Namespace in which the controller manager's leader election lease will be created.")
-	fs.BoolVar(&o.rawOptions.EnforceChargingTargetLabel, EnforceChargingTargetLabelFlag, false, "Enforces the charging target label on projects.")
 	fs.StringVar(&o.ProjectWorkspaceConfigPath, "config", "", "Path to the project workspace config file.")
 
 	o.MemberOverridesName = fs.String("use-member-overrides", "", "Specify a MemberOverrides resources name.")
@@ -324,8 +321,6 @@ func (o *Options) Complete() error {
 	o.Log = log
 	ctrl.SetLogger(o.Log.Logr())
 
-	// Enable charging target label on validating webhook
-	openmcpv1alpha1.EnforceChargingTargetLabel = o.rawOptions.EnforceChargingTargetLabel
 	// load kubeconfigs
 	o.HostClusterConfig = ctrl.GetConfigOrDie()
 	if o.CrateClusterConfig, err = openmcpctrlutil.LoadKubeconfig(o.CrateClusterPath); err != nil {

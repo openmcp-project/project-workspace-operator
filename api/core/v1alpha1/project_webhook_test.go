@@ -10,7 +10,6 @@ import (
 
 var _ = Describe("Project Webhook", func() {
 	BeforeEach(func() {
-		EnforceChargingTargetLabel = false
 		// this must be cleaned with each run because it's name is passed to the webhook at startup. Creating a new one with a different name won't work.
 		err := k8sClient.Delete(ctx, &MemberOverrides{
 			ObjectMeta: metav1.ObjectMeta{
@@ -100,64 +99,6 @@ var _ = Describe("Project Webhook", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("should allow to create a project with the charging-target label", func() {
-			var err error
-
-			EnforceChargingTargetLabel = true
-
-			project := &Project{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: uniqueName(),
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
-				},
-				Spec: ProjectSpec{
-					Members: []ProjectMember{
-						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []ProjectMemberRole{
-								ProjectRoleAdmin,
-							},
-						},
-					},
-				},
-			}
-
-			err = realUserClient.Create(ctx, project)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-
-		It("should deny to create a project without the charging-target label", func() {
-			var err error
-
-			EnforceChargingTargetLabel = true
-
-			project := &Project{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: uniqueName(),
-				},
-				Spec: ProjectSpec{
-					Members: []ProjectMember{
-						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []ProjectMemberRole{
-								ProjectRoleAdmin,
-							},
-						},
-					},
-				},
-			}
-
-			err = realUserClient.Create(ctx, project)
-			Expect(err).To(HaveOccurred())
-		})
 		It("Should allow to create the project by a user in MemberOverrides", func() {
 			var err error
 			var projectName = uniqueName()
@@ -193,9 +134,6 @@ var _ = Describe("Project Webhook", func() {
 			project := &Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: projectName,
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
 				},
 				Spec: ProjectSpec{
 					Members: []ProjectMember{
@@ -252,9 +190,6 @@ var _ = Describe("Project Webhook", func() {
 			project := &Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: projectName,
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
 				},
 				Spec: ProjectSpec{
 					Members: []ProjectMember{
@@ -311,9 +246,6 @@ var _ = Describe("Project Webhook", func() {
 			project := &Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: projectName,
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
 				},
 				Spec: ProjectSpec{
 					Members: []ProjectMember{
@@ -369,9 +301,6 @@ var _ = Describe("Project Webhook", func() {
 			project := &Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: projectName,
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
 				},
 				Spec: ProjectSpec{
 					Members: []ProjectMember{
@@ -420,42 +349,6 @@ var _ = Describe("Project Webhook", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			project.Spec.Members = []ProjectMember{}
-
-			err = realUserClient.Update(ctx, project)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("should deny removing the charging-target label", func() {
-			var err error
-
-			EnforceChargingTargetLabel = true
-
-			project := &Project{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: uniqueName(),
-					Labels: map[string]string{
-						ChargingTargetLabel: "test",
-					},
-				},
-				Spec: ProjectSpec{
-					Members: []ProjectMember{
-						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []ProjectMemberRole{
-								ProjectRoleAdmin,
-							},
-						},
-					},
-				},
-			}
-
-			err = realUserClient.Create(ctx, project)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			project.Labels = nil
 
 			err = realUserClient.Update(ctx, project)
 			Expect(err).To(HaveOccurred())

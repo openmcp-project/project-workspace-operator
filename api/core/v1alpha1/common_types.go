@@ -10,14 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	ChargingTargetLabel string = "openmcp.cloud.sap/charging-target"
-)
-
 var (
-	CreatedByAnnotation        = fmt.Sprintf("%s/created-by", GroupVersion.Group)
-	DisplayNameAnnotation      = fmt.Sprintf("%s/display-name", GroupVersion.Group)
-	EnforceChargingTargetLabel = false
+	CreatedByAnnotation   = fmt.Sprintf("%s/created-by", GroupVersion.Group)
+	DisplayNameAnnotation = fmt.Sprintf("%s/display-name", GroupVersion.Group)
 )
 
 // Subject contains a reference to the object or user identities a role binding applies to. This can either hold a direct API object reference,

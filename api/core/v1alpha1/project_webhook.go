@@ -93,13 +93,6 @@ func (v *projectValidator) ValidateCreate(ctx context.Context, obj runtime.Objec
 		return warnings, errRequestingUserNoAccess(userInfo.Username)
 	}
 
-	if EnforceChargingTargetLabel {
-		err = ensureLabel(project, ChargingTargetLabel)
-		if err != nil {
-			return warnings, err
-		}
-	}
-
 	return
 }
 
@@ -139,13 +132,6 @@ func (v *projectValidator) ValidateUpdate(ctx context.Context, oldObj, newObj ru
 	}
 	if !validNewRole {
 		return warnings, errRequestingUserNoAccess(userInfo.Username)
-	}
-
-	if EnforceChargingTargetLabel {
-		err = ensureLabel(newProject, ChargingTargetLabel)
-		if err != nil {
-			return warnings, err
-		}
 	}
 
 	return

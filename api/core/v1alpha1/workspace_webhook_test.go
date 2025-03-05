@@ -11,7 +11,6 @@ import (
 
 var _ = Describe("Workspace Webhook", func() {
 	BeforeEach(func() {
-		EnforceChargingTargetLabel = false
 		// this must be cleaned with each run because it's name is passed to the webhook at startup. Creating a new one with a different name won't work.
 		err := k8sClient.Delete(ctx, &MemberOverrides{
 			ObjectMeta: metav1.ObjectMeta{
@@ -102,35 +101,6 @@ var _ = Describe("Workspace Webhook", func() {
 
 			err = realUserClient.Create(ctx, project)
 			Expect(err).To(HaveOccurred())
-		})
-
-		It("regression: allow workspace without charging-target label", func() {
-			var err error
-
-			EnforceChargingTargetLabel = true
-
-			project := &Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      uniqueName(),
-					Namespace: "default",
-				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
-						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
-							},
-						},
-					},
-				},
-			}
-
-			err = realUserClient.Create(ctx, project)
-			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("Should allow to create the workspace by a user in MemberOverrides", func() {
@@ -444,37 +414,6 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("regression: allow workspace without charging-target label", func() {
-			var err error
-
-			EnforceChargingTargetLabel = true
-
-			project := &Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      uniqueName(),
-					Namespace: "default",
-				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
-						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
-							},
-						},
-					},
-				},
-			}
-
-			err = realUserClient.Create(ctx, project)
-			Expect(err).ToNot(HaveOccurred())
-
-			err = realUserClient.Update(ctx, project)
-			Expect(err).ToNot(HaveOccurred())
-		})
 		It("should deny updates workspace with MemberOverrides if there is no admin override for the parent project", func() {
 
 			var err error

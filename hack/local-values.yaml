@@ -2,8 +2,6 @@ fullnameOverride: project-workspace-operator
 
 manager:
   extraArgs: []
-  # extraArgs:
-  # - --enforce-charging-target-label
 
 rbac:
   clusterRole:

@@ -73,13 +73,3 @@ func userInfoFromContext(ctx context.Context) (authv1.UserInfo, error) {
 
 	return req.UserInfo, nil
 }
-
-func ensureLabel(meta metav1.Object, label string) error {
-	labels := meta.GetLabels()
-	_, ok := labels[label]
-	if !ok {
-		return fmt.Errorf("label %s is missing", label)
-	}
-
-	return nil
-}
