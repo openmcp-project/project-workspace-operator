@@ -4,6 +4,8 @@ on:
     tags:
       - v*
   workflow_dispatch:
+  pull_request:
+    
 
 permissions: 
   packages: write
@@ -87,4 +89,4 @@ jobs:
 
       - name: Push CTF
         run: |
-          ocm transfer ctf ./ctf ${{ env.OCI_URL }} 
+          ocm transfer ctf --overwrite ./ctf ${{ env.OCI_URL }} 
