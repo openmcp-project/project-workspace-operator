@@ -3,7 +3,8 @@
 set -euo pipefail
 
 if [[ -z ${BASE_REGISTRY:-} ]]; then
-  BASE_REGISTRY=europe-docker.pkg.dev/sap-gcp-cp-k8s-stable-hub/openmcp
+  #FIXME: this is a place holder.
+  BASE_REGISTRY=ghcr.io/openmcp-project/
 fi
 
 if [[ -z ${IMAGE_REGISTRY:-} ]]; then
