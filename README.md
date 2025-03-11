@@ -8,7 +8,29 @@ This repository contains the controllers which reconcile Project and Workspace r
 
 ## Requirements and Setup
 
-*Insert a short description what is required to get your project running...*
+### Prerequisites
+In order to run the operator locally, you need to have the following tools installed:
+- [Go](https://golang.org/dl/)
+- [Docker](https://docs.docker.com/get-docker/)
+- [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+- [KIND](https://kind.sigs.k8s.io/)
+
+### Running the Operator Locally
+1. Execute `make dev-local` to create a local KIND cluster and deploy the operator via Helm.
+2. Look at the [samples](./config/samples/) directory for examples on how to create Project and Workspace resources. Change the `spec` of the resources to you need.
+3. Apply them at the local KIND cluster.
+
+### Generating CRDs and Documentation
+For generating the CRDs, DeepCopy methods and documentation, execute the following command:
+```shell
+make generate
+```
+
+### Cleaning up the KIND cluster
+To clean up the KIND cluster with the deployed operator and its resources, execute the following command:
+```shell
+make dev-clean
+```
 
 ## Support, Feedback, Contributing
 

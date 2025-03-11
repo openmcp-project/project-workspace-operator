@@ -228,13 +228,6 @@ lint:
 lint-fix:
 	golangci-lint run --fix
 
-### ------------------------------------ HELM ------------------------------------ ###
-
-.PHONY: helm-chart
-helm-chart: helm-templates
-	OPERATOR_VERSION=$(shell cat VERSION) envsubst < charts/$(PROJECT_FULL_NAME)/Chart.yaml.tpl > charts/$(PROJECT_FULL_NAME)/Chart.yaml
-	OPERATOR_VERSION=$(shell cat VERSION) envsubst < charts/$(PROJECT_FULL_NAME)/values.yaml.tpl > charts/$(PROJECT_FULL_NAME)/values.yaml
-
 ### ------------------------------------ E2E ------------------------------------ ###
 .PHONY: e2e
 e2e: docker-build
