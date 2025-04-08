@@ -7,7 +7,7 @@ toolchain go1.23.6
 require (
 	github.com/go-logr/logr v1.4.2
 	github.com/onsi/ginkgo/v2 v2.23.4
-	github.com/onsi/gomega v1.36.3
+	github.com/onsi/gomega v1.37.0
 	github.com/openmcp-project/controller-utils v0.4.2
 	github.com/openmcp-project/project-workspace-operator/api v0.9.0
 	github.com/stretchr/testify v1.10.0
