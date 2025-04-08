@@ -191,11 +191,12 @@ CONTROLLER_TOOLS_VERSION ?= v0.16.4
 # renovate: datasource=github-tags depName=golang/tools
 FORMATTER_VERSION ?= v0.26.0
 # renovate: datasource=github-releases depName=golangci/golangci-lint
-LINTER_VERSION ?= v1.61.0
+LINTER_VERSION ?= v1.64.8
 # renovate: datasource=github-releases depName=jqlang/jq
 JQ_VERSION ?= 1.7.1
 # renovate: datasource=github-releases depName=open-component-model/ocm
 OCM_VERSION ?= 0.16.2
+# renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.13.2
 # renovate: datasource=github-releases depName=bronze1man/yaml2json
 YAML2JSON_VERSION ?= v1.3.3
