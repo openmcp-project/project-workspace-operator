@@ -189,7 +189,7 @@ YAML2JSON ?= $(LOCALBIN)/yaml2json
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
 CONTROLLER_TOOLS_VERSION ?= v0.16.4
 # renovate: datasource=github-tags depName=golang/tools
-FORMATTER_VERSION ?= v0.26.0
+FORMATTER_VERSION ?= v0.31.0
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 LINTER_VERSION ?= v1.64.8
 # renovate: datasource=github-releases depName=jqlang/jq
