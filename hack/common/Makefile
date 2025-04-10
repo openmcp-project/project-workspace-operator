@@ -195,11 +195,11 @@ LINTER_VERSION ?= v2.0.2
 # renovate: datasource=github-releases depName=jqlang/jq
 JQ_VERSION ?= 1.7.1
 # renovate: datasource=github-releases depName=open-component-model/ocm
-OCM_VERSION ?= 0.16.2
+OCM_VERSION ?= 0.22.1
 # renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.13.2
 # renovate: datasource=github-releases depName=bronze1man/yaml2json
-YAML2JSON_VERSION ?= v1.3.3
+YAML2JSON_VERSION ?= v1.3.5
 
 ifndef LOCALBIN_TARGET
 LOCALBIN_TARGET := true
