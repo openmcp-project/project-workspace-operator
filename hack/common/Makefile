@@ -195,7 +195,7 @@ LINTER_VERSION ?= v1.64.8
 # renovate: datasource=github-releases depName=jqlang/jq
 JQ_VERSION ?= 1.7.1
 # renovate: datasource=github-releases depName=open-component-model/ocm
-OCM_VERSION ?= 0.22.1
+OCM_VERSION ?= 0.23.0
 # renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.17.3
 # renovate: datasource=github-releases depName=bronze1man/yaml2json
