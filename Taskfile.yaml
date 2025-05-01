@@ -21,5 +21,4 @@ includes:
       CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/test/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
       COMPONENTS: 'project-workspace-operator'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
-      GENERATE_DOCS_INDEX: "true"
       ENVTEST_REQUIRED: "true"
