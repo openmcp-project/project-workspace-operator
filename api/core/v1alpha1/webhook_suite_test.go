@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	//+kubebuilder:scaffold:imports
+	// +kubebuilder:scaffold:imports
 
 	"github.com/google/uuid"
 	envtestutil "github.com/openmcp-project/controller-utils/pkg/envtest"
@@ -86,7 +86,7 @@ var _ = BeforeSuite(func() {
 
 	err = corev1.AddToScheme(testScheme)
 	Expect(err).NotTo(HaveOccurred())
-	//+kubebuilder:scaffold:scheme
+	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -112,7 +112,7 @@ var _ = BeforeSuite(func() {
 	err = (&Workspace{}).SetupWebhookWithManager(mgr, "test-override")
 	Expect(err).NotTo(HaveOccurred())
 
-	//+kubebuilder:scaffold:webhook
+	// +kubebuilder:scaffold:webhook
 
 	go func() {
 		defer GinkgoRecover()
