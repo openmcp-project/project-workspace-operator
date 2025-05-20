@@ -29,7 +29,7 @@ import (
 
 	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	pwocrds "github.com/openmcp-project/project-workspace-operator/api/crds"
-	//+kubebuilder:scaffold:imports
+	// +kubebuilder:scaffold:imports
 )
 
 const (
@@ -142,7 +142,7 @@ func (o *Options) run() {
 			os.Exit(1)
 		}
 	}
-	//+kubebuilder:scaffold:builder
+	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

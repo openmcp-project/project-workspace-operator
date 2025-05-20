@@ -39,10 +39,10 @@ func TestNamespaceForProject(t *testing.T) {
 			expected:    "project-test",
 		},
 		// FIXME the current implementation panics if the project is nil
-		/*{
-		    description: "doesn't fail if nil",
-		    expected: "project-default",
-		},*/
+		// {
+		//     description: "doesn't fail if nil",
+		//     expected: "project-default",
+		// },
 	}
 
 	for _, test := range tests {
@@ -66,10 +66,10 @@ func TestNamespaceForWorkspace(t *testing.T) {
 			expected:    "my-namespace--ws-test",
 		},
 		// FIXME the current implementation panics if the workspace is nil
-		/*{
-		    description: "doesn't fail if nil",
-		    expected: "tbd",
-		},*/
+		// {
+		//     description: "doesn't fail if nil",
+		//     expected: "tbd",
+		// },
 	}
 
 	for _, test := range tests {

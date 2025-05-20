@@ -24,11 +24,11 @@ type ProjectReconciler struct {
 	CommonReconciler
 }
 
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=namespaces;secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=namespaces;secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
