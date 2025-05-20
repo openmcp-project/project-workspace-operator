@@ -36,7 +36,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log := log.FromContext(ctx)
 
 	project := &v1alpha1.Project{}
-	if err := r.Client.Get(ctx, req.NamespacedName, project); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, project); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Project not found")
 			return ctrl.Result{}, nil
@@ -159,7 +159,7 @@ func getSubjectsForProjectRole(project *v1alpha1.Project, role v1alpha1.ProjectM
 
 	for _, member := range project.Spec.Members {
 		if hasProjectRole(member, role) {
-			subjects = append(subjects, member.Subject.RbacV1())
+			subjects = append(subjects, member.RbacV1())
 		}
 	}
 

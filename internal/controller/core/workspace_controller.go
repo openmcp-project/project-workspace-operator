@@ -41,7 +41,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log := log.FromContext(ctx)
 
 	workspace := &v1alpha1.Workspace{}
-	if err := r.Client.Get(ctx, req.NamespacedName, workspace); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, workspace); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Workspace not found")
 			return ctrl.Result{}, nil
@@ -139,7 +139,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespaceName string) (*v1alpha1.Project, error) {
 	namespace := &corev1.Namespace{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +153,7 @@ func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespa
 	}
 
 	project := &v1alpha1.Project{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: projectName}, project); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: projectName}, project); err != nil {
 		return nil, err
 	}
 
@@ -300,7 +300,7 @@ func getSubjectsForWorkspaceRole(workspace *v1alpha1.Workspace, role v1alpha1.Wo
 
 	for _, member := range workspace.Spec.Members {
 		if hasWorkspaceRole(member, role) {
-			subjects = append(subjects, member.Subject.RbacV1())
+			subjects = append(subjects, member.RbacV1())
 		}
 	}
 

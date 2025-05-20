@@ -71,19 +71,19 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 	if isProject {
 		namespace = project.Status.Namespace
 
-		if len(r.ProjectWorkspaceConfig.Project.ResourcesBlockingDeletion) == 0 {
+		if len(r.Project.ResourcesBlockingDeletion) == 0 {
 			return false, nil
 		}
 
-		resourcesBlockingDeletion = r.ProjectWorkspaceConfig.Project.ResourcesBlockingDeletion
+		resourcesBlockingDeletion = r.Project.ResourcesBlockingDeletion
 	} else {
 		namespace = workspace.Status.Namespace
 
-		if len(r.ProjectWorkspaceConfig.Workspace.ResourcesBlockingDeletion) == 0 {
+		if len(r.Workspace.ResourcesBlockingDeletion) == 0 {
 			return false, nil
 		}
 
-		resourcesBlockingDeletion = r.ProjectWorkspaceConfig.Workspace.ResourcesBlockingDeletion
+		resourcesBlockingDeletion = r.Workspace.ResourcesBlockingDeletion
 	}
 
 	remainingResources := make([]unstructured.Unstructured, 0)
@@ -95,7 +95,7 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 		resList := &unstructured.UnstructuredList{}
 		resList.SetGroupVersionKind(gvk.ToSchemaGVK())
 
-		if err := r.Client.List(ctx, resList, client.InNamespace(namespace)); err != nil {
+		if err := r.List(ctx, resList, client.InNamespace(namespace)); err != nil {
 			log.Error(err, "failed to list resources")
 			return false, err
 		}
