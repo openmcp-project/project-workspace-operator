@@ -152,7 +152,7 @@ func (p *Project) RemoveCondition(conditionType ConditionType) {
 	p.Status.Conditions = conditions
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // ProjectList contains a list of Project
 type ProjectList struct {

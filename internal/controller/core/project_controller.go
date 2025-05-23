@@ -24,11 +24,11 @@ type ProjectReconciler struct {
 	CommonReconciler
 }
 
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=namespaces;secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=namespaces;secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -36,7 +36,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log := log.FromContext(ctx)
 
 	project := &v1alpha1.Project{}
-	if err := r.Client.Get(ctx, req.NamespacedName, project); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, project); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Project not found")
 			return ctrl.Result{}, nil
@@ -159,7 +159,7 @@ func getSubjectsForProjectRole(project *v1alpha1.Project, role v1alpha1.ProjectM
 
 	for _, member := range project.Spec.Members {
 		if hasProjectRole(member, role) {
-			subjects = append(subjects, member.Subject.RbacV1())
+			subjects = append(subjects, member.RbacV1())
 		}
 	}
 

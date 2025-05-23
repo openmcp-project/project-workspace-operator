@@ -28,7 +28,7 @@ func (p *Project) SetupWebhookWithManager(mgr ctrl.Manager, memberOverridesName 
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-core-openmcp-cloud-v1alpha1-project,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update,versions=v1alpha1,name=mproject.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-openmcp-cloud-v1alpha1-project,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update,versions=v1alpha1,name=mproject.kb.io,admissionReviewVersions=v1
 
 var _ webhook.CustomDefaulter = &Project{}
 
@@ -63,7 +63,7 @@ func (p *Project) ValidateDelete(ctx context.Context, obj runtime.Object) (warni
 	return
 }
 
-//+kubebuilder:webhook:path=/validate-core-openmcp-cloud-v1alpha1-project,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update;delete,versions=v1alpha1,name=vproject.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-openmcp-cloud-v1alpha1-project,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update;delete,versions=v1alpha1,name=vproject.kb.io,admissionReviewVersions=v1
 
 var _ webhook.CustomValidator = &projectValidator{}
 

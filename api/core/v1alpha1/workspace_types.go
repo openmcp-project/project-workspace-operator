@@ -152,7 +152,7 @@ func (ws *Workspace) RemoveCondition(conditionType ConditionType) {
 	ws.Status.Conditions = conditions
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // WorkspaceList contains a list of Workspace
 type WorkspaceList struct {
