@@ -20,7 +20,7 @@ image:
   repository: ghcr.io/openmcp-project/images/project-workspace-operator
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: v0.13.0
+  tag: v0.13.0@sha256:ea7129d353c8dc68fa46c05264f6c1841daeaba88a4045246543ea832dd142c6
 
 imagePullSecrets: []
 nameOverride: ""
