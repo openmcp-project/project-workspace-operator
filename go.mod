@@ -3,10 +3,10 @@ module github.com/openmcp-project/project-workspace-operator
 go 1.24.2
 
 require (
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
-	github.com/openmcp-project/controller-utils v0.9.0
+	github.com/openmcp-project/controller-utils v0.10.0
 	github.com/openmcp-project/project-workspace-operator/api v0.13.1
 	github.com/stretchr/testify v1.10.0
 	k8s.io/api v0.33.1
