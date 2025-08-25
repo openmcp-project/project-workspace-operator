@@ -8,7 +8,7 @@ require (
 	github.com/onsi/gomega v1.38.0
 	github.com/openmcp-project/controller-utils v0.16.0
 	github.com/openmcp-project/project-workspace-operator/api v0.16.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
