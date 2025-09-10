@@ -29,11 +29,18 @@
     },
     {
       "matchPackageNames": [
+      "description": "Automerge submodule update",
+      "automerge": true,
+      "matchPackageNames": ["hack/common"]
+    },
+    {
+      "description": "Update and automerge all components from openmcp-project immediately",
+      "matchPackageNames": [
         "github.com/openmcp-project/*"
       ],
-      "description": "Update all components from openmcp-project immediately",
       "rebaseWhen": "auto",
       "minimumReleaseAge": "0 days",
+      "automerge": true,
       "enabled": true
     },
     {
