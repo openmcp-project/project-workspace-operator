@@ -9,9 +9,9 @@ require (
 	github.com/openmcp-project/controller-utils v0.19.0
 	github.com/openmcp-project/project-workspace-operator/api v0.17.0
 	github.com/stretchr/testify v1.11.1
-	k8s.io/api v0.34.0
-	k8s.io/apimachinery v0.34.0
-	k8s.io/client-go v0.34.0
+	k8s.io/api v0.34.1
+	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.1
 	sigs.k8s.io/e2e-framework v0.6.0
 )
@@ -31,7 +31,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
-	k8s.io/component-base v0.34.0 // indirect
+	k8s.io/component-base v0.34.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )
@@ -83,7 +83,7 @@ require (
 	google.golang.org/protobuf v1.36.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.34.0 // indirect
+	k8s.io/apiextensions-apiserver v0.34.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
