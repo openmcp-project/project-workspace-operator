@@ -1,6 +1,6 @@
 module github.com/openmcp-project/project-workspace-operator/api
 
-go 1.25.1
+go 1.25.3
 
 require (
 	github.com/google/uuid v1.6.0
