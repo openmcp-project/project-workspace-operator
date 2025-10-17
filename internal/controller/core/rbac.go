@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 )
 
 var (
@@ -31,11 +32,12 @@ var (
 	}
 )
 
-func NewRBACSetup(setupLog logr.Logger, c client.Client, controllerName string) *RBACSetup {
+func NewRBACSetup(setupLog logr.Logger, c client.Client, controllerName string, cfg *config.ProjectWorkspaceConfig) *RBACSetup {
 	return &RBACSetup{
 		log:            setupLog,
 		client:         c,
 		controllerName: controllerName,
+		config:         cfg,
 	}
 }
 
@@ -43,6 +45,7 @@ type RBACSetup struct {
 	log            logr.Logger
 	client         client.Client
 	controllerName string
+	config         *config.ProjectWorkspaceConfig
 }
 
 func (setup *RBACSetup) EnsureResources(ctx context.Context) error {
@@ -102,6 +105,13 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 					Resources: []string{"serviceaccounts/token"},
 					Verbs:     []string{"create"},
 				})
+			}
+
+			// add roles from config, if defined
+			if setup.config != nil {
+				for _, perm := range setup.config.Project.AdditionalPermissions[role] {
+					clusterRole.Rules = append(clusterRole.Rules, perm)
+				}
 			}
 
 			return nil
@@ -164,6 +174,13 @@ func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context)
 					Resources: []string{"serviceaccounts/token"},
 					Verbs:     []string{"create"},
 				})
+			}
+
+			// add roles from config, if defined
+			if setup.config != nil {
+				for _, perm := range setup.config.Workspace.AdditionalPermissions[role] {
+					clusterRole.Rules = append(clusterRole.Rules, perm)
+				}
 			}
 
 			return nil

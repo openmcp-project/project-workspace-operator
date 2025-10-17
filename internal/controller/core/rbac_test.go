@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 )
 
 func TestRBACSetup_EnsureResources(t *testing.T) {
@@ -23,6 +24,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 		interceptorFuncs interceptor.Funcs
 		expectedError    *string
 		validateFunc     func(ctx context.Context, client client.Client) error
+		config           *config.ProjectWorkspaceConfig
 	}{
 		{
 			name: "Failed to Create/Update Project Cluster Roles",
@@ -87,13 +89,106 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name:          "Successfully Create/Update Project and Workspace Cluster Roles with additional permissions from config",
+			expectedError: nil,
+			config: &config.ProjectWorkspaceConfig{
+				Project: config.ProjectConfig{
+					AdditionalPermissions: map[v1alpha1.ProjectMemberRole][]rbacv1.PolicyRule{
+						v1alpha1.ProjectRoleAdmin: {
+							{
+								APIGroups: []string{"admin"},
+								Resources: []string{"project"},
+								Verbs:     []string{"*"},
+							},
+						},
+						v1alpha1.ProjectRoleView: {
+							{
+								APIGroups: []string{"view"},
+								Resources: []string{"project"},
+								Verbs:     []string{"*"},
+							},
+						},
+					},
+				},
+				Workspace: config.WorkspaceConfig{
+					AdditionalPermissions: map[v1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule{
+						v1alpha1.WorkspaceRoleAdmin: {
+							{
+								APIGroups: []string{"admin"},
+								Resources: []string{"workspace"},
+								Verbs:     []string{"*"},
+							},
+						},
+						v1alpha1.WorkspaceRoleView: {
+							{
+								APIGroups: []string{"view"},
+								Resources: []string{"workspace"},
+								Verbs:     []string{"*"},
+							},
+						},
+					},
+				},
+			},
+			validateFunc: func(ctx context.Context, client client.Client) error {
+				clusterRoleProjectAdmin := &rbacv1.ClusterRole{}
+				err := client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleAdmin)}, clusterRoleProjectAdmin)
+				if err != nil {
+					return err
+				}
+
+				assert.Contains(t, clusterRoleProjectAdmin.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"admin"},
+					Resources: []string{"project"},
+					Verbs:     []string{"*"},
+				})
+
+				clusterRoleProjectView := &rbacv1.ClusterRole{}
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleView)}, clusterRoleProjectView)
+				if err != nil {
+					return err
+				}
+
+				assert.Contains(t, clusterRoleProjectView.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"view"},
+					Resources: []string{"project"},
+					Verbs:     []string{"*"},
+				})
+
+				clusterRoleWorkspaceAdmin := &rbacv1.ClusterRole{}
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleAdmin)}, clusterRoleWorkspaceAdmin)
+				if err != nil {
+					return err
+				}
+
+				assert.Contains(t, clusterRoleWorkspaceAdmin.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"admin"},
+					Resources: []string{"workspace"},
+					Verbs:     []string{"*"},
+				})
+
+				clusterRoleWorkspaceView := &rbacv1.ClusterRole{}
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleView)}, clusterRoleWorkspaceView)
+				if err != nil {
+					return err
+				}
+
+				assert.Contains(t, clusterRoleWorkspaceView.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"view"},
+					Resources: []string{"workspace"},
+					Verbs:     []string{"*"},
+				})
+
+				return nil
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.TODO()
 			c := fake.NewClientBuilder().WithInterceptorFuncs(tt.interceptorFuncs).Build()
-			s := NewRBACSetup(testr.New(t), c, "test-rbac-controller")
+			s := NewRBACSetup(testr.New(t), c, "test-rbac-controller", tt.config)
 
 			actualError := s.EnsureResources(ctx)
 

@@ -101,7 +101,7 @@ func (o *Options) run() {
 		os.Exit(1)
 	}
 
-	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName)
+	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName, o.ProjectWorkspaceConfig)
 	if err := rbacSetup.EnsureResources(runContext); err != nil {
 		setupLog.Error(err, "unable to create or update RBAC resources")
 		os.Exit(1)
