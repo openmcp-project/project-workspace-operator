@@ -5,6 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 )
 
@@ -29,9 +32,11 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestDefaults(t *testing.T) {
-	pwConfig := &config.ProjectWorkspaceConfig{
-		Project:   config.ProjectConfig{},
-		Workspace: config.WorkspaceConfig{},
+	pwConfig := &pwv1alpha1.ProjectWorkspaceConfig{
+		Spec: pwv1alpha1.ProjectWorkspaceConfigSpec{
+			Project:   pwv1alpha1.ProjectConfig{},
+			Workspace: pwv1alpha1.WorkspaceConfig{},
+		},
 	}
 
 	pwConfig.SetDefaults()
@@ -40,17 +45,19 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	pwConfig := &config.ProjectWorkspaceConfig{
-		Project: config.ProjectConfig{
-			ResourcesBlockingDeletion: []config.GroupVersionKind{
-				{
-					Group:   "",
-					Version: "v1",
-					Kind:    "Secret",
+	pwConfig := &pwv1alpha1.ProjectWorkspaceConfig{
+		Spec: pwv1alpha1.ProjectWorkspaceConfigSpec{
+			Project: pwv1alpha1.ProjectConfig{
+				ResourcesBlockingDeletion: []metav1.GroupVersionKind{
+					{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Secret",
+					},
 				},
 			},
+			Workspace: pwv1alpha1.WorkspaceConfig{},
 		},
-		Workspace: config.WorkspaceConfig{},
 	}
 
 	assert.NoError(t, pwConfig.Validate())

@@ -21,24 +21,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/entities"
 )
 
 var (
 	Scheme = runtime.NewScheme()
 
-	deleteFinalizer = v1alpha1.GroupVersion.Group
+	deleteFinalizer = pwv1alpha1.GroupVersion.Group
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
-	utilruntime.Must(v1alpha1.AddToScheme(Scheme))
+	utilruntime.Must(pwv1alpha1.AddToScheme(Scheme))
 }
 
 type CommonReconciler struct {
 	client.Client
-	*config.ProjectWorkspaceConfig
+	pwv1alpha1.ProjectWorkspaceConfigSpec
 	ControllerName string
 }
 
@@ -58,15 +58,15 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 		return false, nil
 	}
 
-	project, isProject := o.(*v1alpha1.Project)
-	workspace, isWorkspace := o.(*v1alpha1.Workspace)
+	project, isProject := o.(*pwv1alpha1.Project)
+	workspace, isWorkspace := o.(*pwv1alpha1.Workspace)
 
 	if !isProject && !isWorkspace {
 		return false, fmt.Errorf("object is not a Project or Workspace")
 	}
 
 	var namespace string
-	var resourcesBlockingDeletion []config.GroupVersionKind
+	var resourcesBlockingDeletion []metav1.GroupVersionKind
 
 	if isProject {
 		namespace = project.Status.Namespace
@@ -87,13 +87,13 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 	}
 
 	remainingResources := make([]unstructured.Unstructured, 0)
-	var remainingResourcesCondition v1alpha1.Condition
+	var remainingResourcesCondition pwv1alpha1.Condition
 
 	log := log.FromContext(ctx)
 
 	for _, gvk := range resourcesBlockingDeletion {
 		resList := &unstructured.UnstructuredList{}
-		resList.SetGroupVersionKind(gvk.ToSchemaGVK())
+		resList.SetGroupVersionKind(config.ToSchemaGVK(gvk))
 
 		if err := r.List(ctx, resList, client.InNamespace(namespace)); err != nil {
 			log.Error(err, "failed to list resources")
@@ -106,17 +106,17 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 	}
 
 	if len(remainingResources) > 0 {
-		resources := make([]v1alpha1.RemainingContentResource, 0, len(remainingResources))
+		resources := make([]pwv1alpha1.RemainingContentResource, 0, len(remainingResources))
 
-		remainingResourcesCondition = v1alpha1.Condition{
-			Type:    v1alpha1.ConditionTypeContentRemaining,
-			Status:  v1alpha1.ConditionStatusTrue,
-			Reason:  v1alpha1.ConditionReasonResourcesRemaining,
+		remainingResourcesCondition = pwv1alpha1.Condition{
+			Type:    pwv1alpha1.ConditionTypeContentRemaining,
+			Status:  pwv1alpha1.ConditionStatusTrue,
+			Reason:  pwv1alpha1.ConditionReasonResourcesRemaining,
 			Message: fmt.Sprintf("There are %d remaining resources in namespace %s that are preventing deletion", len(remainingResources), namespace),
 		}
 
 		for _, res := range remainingResources {
-			resources = append(resources, v1alpha1.RemainingContentResource{
+			resources = append(resources, pwv1alpha1.RemainingContentResource{
 				APIGroup:  res.GetAPIVersion(),
 				Kind:      res.GetKind(),
 				Name:      res.GetName(),
@@ -141,9 +141,9 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 		return true, nil
 	} else {
 		if isProject {
-			project.RemoveCondition(v1alpha1.ConditionTypeContentRemaining)
+			project.RemoveCondition(pwv1alpha1.ConditionTypeContentRemaining)
 		} else {
-			workspace.RemoveCondition(v1alpha1.ConditionTypeContentRemaining)
+			workspace.RemoveCondition(pwv1alpha1.ConditionTypeContentRemaining)
 		}
 	}
 

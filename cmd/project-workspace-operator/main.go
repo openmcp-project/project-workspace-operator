@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	pwocrds "github.com/openmcp-project/project-workspace-operator/api/crds"
 	// +kubebuilder:scaffold:imports
 )
@@ -101,16 +101,16 @@ func (o *Options) run() {
 		os.Exit(1)
 	}
 
-	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName, o.ProjectWorkspaceConfig)
+	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName, o.ProjectWorkspaceConfig.Spec)
 	if err := rbacSetup.EnsureResources(runContext); err != nil {
 		setupLog.Error(err, "unable to create or update RBAC resources")
 		os.Exit(1)
 	}
 
 	commonReconciler := core.CommonReconciler{
-		Client:                 mgr.GetClient(),
-		ControllerName:         controllerName,
-		ProjectWorkspaceConfig: o.ProjectWorkspaceConfig,
+		Client:                     mgr.GetClient(),
+		ControllerName:             controllerName,
+		ProjectWorkspaceConfigSpec: o.ProjectWorkspaceConfig.Spec,
 	}
 
 	if err = (&core.ProjectReconciler{
@@ -132,12 +132,12 @@ func (o *Options) run() {
 	}
 
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err = (&openmcpv1alpha1.Project{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 			os.Exit(1)
 		}
 
-		if err = (&openmcpv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
@@ -225,8 +225,8 @@ func (o *Options) runInit() {
 			setupClient,
 			scheme,
 			[]client.Object{
-				&openmcpv1alpha1.Project{},
-				&openmcpv1alpha1.Workspace{},
+				&pwv1alpha1.Project{},
+				&pwv1alpha1.Workspace{},
 			},
 			installOptions...,
 		)
@@ -274,7 +274,7 @@ type Options struct {
 	CRDFlags               *crds.Flags
 	WebhooksFlags          *webhooks.Flags
 	MemberOverridesName    *string
-	ProjectWorkspaceConfig *config.ProjectWorkspaceConfig
+	ProjectWorkspaceConfig *pwv1alpha1.ProjectWorkspaceConfig
 }
 
 func NewOptions() *Options {
@@ -335,7 +335,7 @@ func (o *Options) Complete() error {
 	}
 
 	if o.ProjectWorkspaceConfig == nil {
-		o.ProjectWorkspaceConfig = &config.ProjectWorkspaceConfig{}
+		o.ProjectWorkspaceConfig = &pwv1alpha1.ProjectWorkspaceConfig{}
 	}
 
 	o.ProjectWorkspaceConfig.SetDefaults()
