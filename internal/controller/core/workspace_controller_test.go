@@ -7,8 +7,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/json"
 
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
-
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 var (
@@ -34,39 +32,39 @@ var (
 			},
 		},
 	}
-	sampleWorkspace = &v1alpha1.Workspace{
+	sampleWorkspace = &pwv1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sample",
 			Namespace: projectNamespace.Name,
 		},
-		Spec: v1alpha1.WorkspaceSpec{
-			Members: []v1alpha1.WorkspaceMember{
+		Spec: pwv1alpha1.WorkspaceSpec{
+			Members: []pwv1alpha1.WorkspaceMember{
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind: rbacv1.UserKind,
 						Name: "user@example.com",
 					},
-					Roles: []v1alpha1.WorkspaceMemberRole{v1alpha1.WorkspaceRoleAdmin},
+					Roles: []pwv1alpha1.WorkspaceMemberRole{pwv1alpha1.WorkspaceRoleAdmin},
 				},
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind: rbacv1.GroupKind,
 						Name: "some-group",
 					},
-					Roles: []v1alpha1.WorkspaceMemberRole{v1alpha1.WorkspaceRoleAdmin},
+					Roles: []pwv1alpha1.WorkspaceMemberRole{pwv1alpha1.WorkspaceRoleAdmin},
 				},
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind:      "ServiceAccount",
 						Name:      "default",
 						Namespace: "default",
 					},
-					Roles: []v1alpha1.WorkspaceMemberRole{v1alpha1.WorkspaceRoleView},
+					Roles: []pwv1alpha1.WorkspaceMemberRole{pwv1alpha1.WorkspaceRoleView},
 				},
 			},
 		},
 	}
-	sampleWorkspaceDeleted = &v1alpha1.Workspace{
+	sampleWorkspaceDeleted = &pwv1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "sample",
 			Namespace:         projectNamespace.Name,
@@ -75,7 +73,7 @@ var (
 				deleteFinalizer,
 			},
 		},
-		Status: v1alpha1.WorkspaceStatus{
+		Status: pwv1alpha1.WorkspaceStatus{
 			Namespace: "project-sample--ws-sample",
 		},
 	}
@@ -98,7 +96,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			},
 			interceptorFuncs: interceptor.Funcs{
 				Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					return apierrors.NewNotFound(v1alpha1.GroupVersion.WithResource("workspaces").GroupResource(), sampleWorkspace.Name)
+					return apierrors.NewNotFound(pwv1alpha1.GroupVersion.WithResource("workspaces").GroupResource(), sampleWorkspace.Name)
 				},
 			},
 			expectedResult: reconcile.Result{},
@@ -156,7 +154,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check workspace status
-				ws := &v1alpha1.Workspace{}
+				ws := &pwv1alpha1.Workspace{}
 				assert.NoErrorf(t, c.Get(ctx, client.ObjectKeyFromObject(sampleWorkspace), ws), "GET failed unexpectedly")
 				assert.Equal(t, "project-sample--ws-sample", ws.Status.Namespace)
 				assert.Contains(t, ws.Finalizers, deleteFinalizer)
@@ -176,9 +174,9 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 					},
 				}
 
-				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleAdmin, true, 1)
-				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleAdmin, true, expectedAdmins)
-				roleBindingCreatedForWorkspace(t, ctx, c, ws, v1alpha1.WorkspaceRoleAdmin, true, expectedAdmins)
+				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleAdmin, true, 1)
+				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleAdmin, true, expectedAdmins)
+				roleBindingCreatedForWorkspace(t, ctx, c, ws, pwv1alpha1.WorkspaceRoleAdmin, true, expectedAdmins)
 
 				expectedViewers := []rbacv1.Subject{
 					{
@@ -188,9 +186,9 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 					},
 				}
 
-				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleView, true, 1)
-				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleView, true, expectedViewers)
-				roleBindingCreatedForWorkspace(t, ctx, c, ws, v1alpha1.WorkspaceRoleView, true, expectedViewers)
+				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleView, true, 1)
+				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleView, true, expectedViewers)
+				roleBindingCreatedForWorkspace(t, ctx, c, ws, pwv1alpha1.WorkspaceRoleView, true, expectedViewers)
 
 				return nil
 			},
@@ -211,17 +209,17 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check workspace status
-				ws := &v1alpha1.Workspace{}
+				ws := &pwv1alpha1.Workspace{}
 				err := c.Get(ctx, client.ObjectKeyFromObject(sampleWorkspaceDeleted), ws)
 				assert.True(t, apierrors.IsNotFound(err))
 
 				namespaceCreatedForWorkspace(t, ctx, c, sampleWorkspaceDeleted, false)
 
-				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleAdmin, false, 0)
-				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleAdmin, false, nil)
+				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleAdmin, false, 0)
+				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleAdmin, false, nil)
 
-				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleView, false, 0)
-				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, v1alpha1.WorkspaceRoleView, false, nil)
+				clusterRoleCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleView, false, 0)
+				clusterRoleBindingCreatedForWorkspace(t, ctx, c, sampleProject, ws, pwv1alpha1.WorkspaceRoleView, false, nil)
 
 				return nil
 			},
@@ -248,19 +246,19 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check workspace status
-				ws := &v1alpha1.Workspace{}
+				ws := &pwv1alpha1.Workspace{}
 				err := c.Get(ctx, client.ObjectKeyFromObject(sampleWorkspaceDeleted), ws)
 				assert.NoError(t, err)
 				assert.NotNil(t, ws.GetDeletionTimestamp())
 
 				assert.Len(t, ws.Status.Conditions, 1)
-				assert.Equal(t, v1alpha1.ConditionTypeContentRemaining, ws.Status.Conditions[0].Type)
-				assert.Equal(t, v1alpha1.ConditionStatusTrue, ws.Status.Conditions[0].Status)
-				assert.Equal(t, v1alpha1.ConditionReasonResourcesRemaining, ws.Status.Conditions[0].Reason)
+				assert.Equal(t, pwv1alpha1.ConditionTypeContentRemaining, ws.Status.Conditions[0].Type)
+				assert.Equal(t, pwv1alpha1.ConditionStatusTrue, ws.Status.Conditions[0].Status)
+				assert.Equal(t, pwv1alpha1.ConditionReasonResourcesRemaining, ws.Status.Conditions[0].Reason)
 				assert.NotEmpty(t, ws.Status.Conditions[0].Message)
 				assert.NotNil(t, ws.Status.Conditions[0].Details)
 
-				var remainingResources []v1alpha1.RemainingContentResource
+				var remainingResources []pwv1alpha1.RemainingContentResource
 				assert.NoError(t, json.Unmarshal(ws.Status.Conditions[0].Details, &remainingResources))
 				assert.Len(t, remainingResources, 1)
 				assert.Equal(t, "v1", remainingResources[0].APIGroup)
@@ -293,9 +291,9 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 				CommonReconciler: CommonReconciler{
 					Client:         c,
 					ControllerName: "test",
-					ProjectWorkspaceConfig: &config.ProjectWorkspaceConfig{
-						Workspace: config.WorkspaceConfig{
-							ResourcesBlockingDeletion: []config.GroupVersionKind{
+					ProjectWorkspaceConfigSpec: pwv1alpha1.ProjectWorkspaceConfigSpec{
+						Workspace: pwv1alpha1.WorkspaceConfig{
+							ResourcesBlockingDeletion: []metav1.GroupVersionKind{
 								{
 									Group:   "",
 									Version: "v1",
@@ -325,7 +323,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 	}
 }
 
-func namespaceCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, ws *v1alpha1.Workspace, expectation bool) *corev1.Namespace {
+func namespaceCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, ws *pwv1alpha1.Workspace, expectation bool) *corev1.Namespace {
 	ns := &corev1.Namespace{}
 	err := c.Get(ctx, types.NamespacedName{Name: ws.Status.Namespace}, ns)
 	if expectation {
@@ -337,7 +335,7 @@ func namespaceCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Cl
 	return ns
 }
 
-func clusterRoleCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, ws *v1alpha1.Workspace, role v1alpha1.WorkspaceMemberRole, expectation bool, expectedRules int) {
+func clusterRoleCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, ws *pwv1alpha1.Workspace, role pwv1alpha1.WorkspaceMemberRole, expectation bool, expectedRules int) {
 	cr := &rbacv1.ClusterRole{}
 	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRoleWithParent(ws, role, p)}, cr)
 	if expectation {
@@ -348,7 +346,7 @@ func clusterRoleCreatedForWorkspace(t *testing.T, ctx context.Context, c client.
 	}
 }
 
-func clusterRoleBindingCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, ws *v1alpha1.Workspace, role v1alpha1.WorkspaceMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
+func clusterRoleBindingCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, ws *pwv1alpha1.Workspace, role pwv1alpha1.WorkspaceMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	crb := &rbacv1.ClusterRoleBinding{}
 	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRoleWithParent(ws, role, p)}, crb)
 	if expectation {
@@ -359,7 +357,7 @@ func clusterRoleBindingCreatedForWorkspace(t *testing.T, ctx context.Context, c 
 	}
 }
 
-func roleBindingCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, ws *v1alpha1.Workspace, role v1alpha1.WorkspaceMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
+func roleBindingCreatedForWorkspace(t *testing.T, ctx context.Context, c client.Client, ws *pwv1alpha1.Workspace, role pwv1alpha1.WorkspaceMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	rb := &rbacv1.RoleBinding{}
 	err := c.Get(ctx, types.NamespacedName{Name: roleBindingForRole(role), Namespace: ws.Status.Namespace}, rb)
 	if expectation {

@@ -14,8 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 func TestRBACSetup_EnsureResources(t *testing.T) {
@@ -24,7 +23,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 		interceptorFuncs interceptor.Funcs
 		expectedError    *string
 		validateFunc     func(ctx context.Context, client client.Client) error
-		config           *config.ProjectWorkspaceConfig
+		config           pwv1alpha1.ProjectWorkspaceConfigSpec
 	}{
 		{
 			name: "Failed to Create/Update Project Cluster Roles",
@@ -42,7 +41,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 			name: "Failed to Create/Update Workspace Cluster Roles",
 			interceptorFuncs: interceptor.Funcs{
 				Create: func(ctx context.Context, client client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-					if role, ok := obj.(*rbacv1.ClusterRole); ok && role.Name == clusterRoleForRole(v1alpha1.WorkspaceRoleView) {
+					if role, ok := obj.(*rbacv1.ClusterRole); ok && role.Name == clusterRoleForRole(pwv1alpha1.WorkspaceRoleView) {
 						return errors.New("some create error")
 					}
 					return client.Create(ctx, obj)
@@ -55,7 +54,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 			expectedError: nil,
 			validateFunc: func(ctx context.Context, client client.Client) error {
 				clusterRoleProjectAdmin := &rbacv1.ClusterRole{}
-				err := client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleAdmin)}, clusterRoleProjectAdmin)
+				err := client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleAdmin)}, clusterRoleProjectAdmin)
 				if err != nil {
 					return err
 				}
@@ -63,7 +62,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				assert.NotEmpty(t, clusterRoleProjectAdmin.Rules)
 
 				clusterRoleProjectView := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleView)}, clusterRoleProjectView)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleView)}, clusterRoleProjectView)
 				if err != nil {
 					return err
 				}
@@ -71,7 +70,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				assert.NotEmpty(t, clusterRoleProjectView.Rules)
 
 				clusterRoleWorkspaceAdmin := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleAdmin)}, clusterRoleWorkspaceAdmin)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleAdmin)}, clusterRoleWorkspaceAdmin)
 				if err != nil {
 					return err
 				}
@@ -79,7 +78,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				assert.NotEmpty(t, clusterRoleWorkspaceAdmin.Rules)
 
 				clusterRoleWorkspaceView := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleView)}, clusterRoleWorkspaceView)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleView)}, clusterRoleWorkspaceView)
 				if err != nil {
 					return err
 				}
@@ -92,17 +91,17 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 		{
 			name:          "Successfully Create/Update Project and Workspace Cluster Roles with additional permissions from config",
 			expectedError: nil,
-			config: &config.ProjectWorkspaceConfig{
-				Project: config.ProjectConfig{
-					AdditionalPermissions: map[v1alpha1.ProjectMemberRole][]rbacv1.PolicyRule{
-						v1alpha1.ProjectRoleAdmin: {
+			config: pwv1alpha1.ProjectWorkspaceConfigSpec{
+				Project: pwv1alpha1.ProjectConfig{
+					AdditionalPermissions: map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule{
+						pwv1alpha1.ProjectRoleAdmin: {
 							{
 								APIGroups: []string{"admin"},
 								Resources: []string{"project"},
 								Verbs:     []string{"*"},
 							},
 						},
-						v1alpha1.ProjectRoleView: {
+						pwv1alpha1.ProjectRoleView: {
 							{
 								APIGroups: []string{"view"},
 								Resources: []string{"project"},
@@ -111,16 +110,16 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 						},
 					},
 				},
-				Workspace: config.WorkspaceConfig{
-					AdditionalPermissions: map[v1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule{
-						v1alpha1.WorkspaceRoleAdmin: {
+				Workspace: pwv1alpha1.WorkspaceConfig{
+					AdditionalPermissions: map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule{
+						pwv1alpha1.WorkspaceRoleAdmin: {
 							{
 								APIGroups: []string{"admin"},
 								Resources: []string{"workspace"},
 								Verbs:     []string{"*"},
 							},
 						},
-						v1alpha1.WorkspaceRoleView: {
+						pwv1alpha1.WorkspaceRoleView: {
 							{
 								APIGroups: []string{"view"},
 								Resources: []string{"workspace"},
@@ -132,7 +131,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 			},
 			validateFunc: func(ctx context.Context, client client.Client) error {
 				clusterRoleProjectAdmin := &rbacv1.ClusterRole{}
-				err := client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleAdmin)}, clusterRoleProjectAdmin)
+				err := client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleAdmin)}, clusterRoleProjectAdmin)
 				if err != nil {
 					return err
 				}
@@ -144,7 +143,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				})
 
 				clusterRoleProjectView := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.ProjectRoleView)}, clusterRoleProjectView)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleView)}, clusterRoleProjectView)
 				if err != nil {
 					return err
 				}
@@ -156,7 +155,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				})
 
 				clusterRoleWorkspaceAdmin := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleAdmin)}, clusterRoleWorkspaceAdmin)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleAdmin)}, clusterRoleWorkspaceAdmin)
 				if err != nil {
 					return err
 				}
@@ -168,7 +167,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 				})
 
 				clusterRoleWorkspaceView := &rbacv1.ClusterRole{}
-				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(v1alpha1.WorkspaceRoleView)}, clusterRoleWorkspaceView)
+				err = client.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleView)}, clusterRoleWorkspaceView)
 				if err != nil {
 					return err
 				}

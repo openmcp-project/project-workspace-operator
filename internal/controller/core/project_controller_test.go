@@ -8,8 +8,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/json"
 
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
-
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -24,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 const (
@@ -32,38 +30,38 @@ const (
 )
 
 var (
-	sampleProject = &v1alpha1.Project{
+	sampleProject = &pwv1alpha1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "sample",
 		},
-		Spec: v1alpha1.ProjectSpec{
-			Members: []v1alpha1.ProjectMember{
+		Spec: pwv1alpha1.ProjectSpec{
+			Members: []pwv1alpha1.ProjectMember{
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind: rbacv1.UserKind,
 						Name: "user@example.com",
 					},
-					Roles: []v1alpha1.ProjectMemberRole{v1alpha1.ProjectRoleAdmin},
+					Roles: []pwv1alpha1.ProjectMemberRole{pwv1alpha1.ProjectRoleAdmin},
 				},
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind: rbacv1.GroupKind,
 						Name: "some-group",
 					},
-					Roles: []v1alpha1.ProjectMemberRole{v1alpha1.ProjectRoleAdmin},
+					Roles: []pwv1alpha1.ProjectMemberRole{pwv1alpha1.ProjectRoleAdmin},
 				},
 				{
-					Subject: v1alpha1.Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind:      "ServiceAccount",
 						Name:      "default",
 						Namespace: "default",
 					},
-					Roles: []v1alpha1.ProjectMemberRole{v1alpha1.ProjectRoleView},
+					Roles: []pwv1alpha1.ProjectMemberRole{pwv1alpha1.ProjectRoleView},
 				},
 			},
 		},
 	}
-	sampleProjectDeleted = &v1alpha1.Project{
+	sampleProjectDeleted = &pwv1alpha1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "sample",
 			DeletionTimestamp: ptr.To(metav1.Now()),
@@ -71,7 +69,7 @@ var (
 				deleteFinalizer,
 			},
 		},
-		Status: v1alpha1.ProjectStatus{
+		Status: pwv1alpha1.ProjectStatus{
 			Namespace: "project-sample",
 		},
 	}
@@ -95,7 +93,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			},
 			interceptorFuncs: interceptor.Funcs{
 				Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					return apierrors.NewNotFound(v1alpha1.GroupVersion.WithResource("projects").GroupResource(), sampleProject.Name)
+					return apierrors.NewNotFound(pwv1alpha1.GroupVersion.WithResource("projects").GroupResource(), sampleProject.Name)
 				},
 			},
 			expectedResult: reconcile.Result{},
@@ -123,7 +121,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check project status
-				p := &v1alpha1.Project{}
+				p := &pwv1alpha1.Project{}
 				assert.NoErrorf(t, c.Get(ctx, client.ObjectKeyFromObject(sampleProject), p), "GET failed unexpectedly")
 				assert.Equal(t, "project-sample", p.Status.Namespace)
 				assert.Contains(t, p.Finalizers, deleteFinalizer)
@@ -143,9 +141,9 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 					},
 				}
 
-				clusterRoleCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleAdmin, true, 2)
-				clusterRoleBindingCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleAdmin, true, expectedAdmins)
-				roleBindingCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleAdmin, true, expectedAdmins)
+				clusterRoleCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleAdmin, true, 2)
+				clusterRoleBindingCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleAdmin, true, expectedAdmins)
+				roleBindingCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleAdmin, true, expectedAdmins)
 
 				expectedViewers := []rbacv1.Subject{
 					{
@@ -155,9 +153,9 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 					},
 				}
 
-				clusterRoleCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleView, true, 2)
-				clusterRoleBindingCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleView, true, expectedViewers)
-				roleBindingCreatedForProject(t, ctx, c, p, v1alpha1.ProjectRoleView, true, expectedViewers)
+				clusterRoleCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleView, true, 2)
+				clusterRoleBindingCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleView, true, expectedViewers)
+				roleBindingCreatedForProject(t, ctx, c, p, pwv1alpha1.ProjectRoleView, true, expectedViewers)
 
 				return nil
 			},
@@ -176,7 +174,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check project status
-				p := &v1alpha1.Project{}
+				p := &pwv1alpha1.Project{}
 				err := c.Get(ctx, client.ObjectKeyFromObject(sampleProjectDeleted), p)
 				assert.True(t, apierrors.IsNotFound(err))
 
@@ -205,18 +203,18 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check workspace status
-				p := &v1alpha1.Project{}
+				p := &pwv1alpha1.Project{}
 				err := c.Get(ctx, client.ObjectKeyFromObject(sampleProjectDeleted), p)
 				assert.NoError(t, err)
 
 				assert.Len(t, p.Status.Conditions, 1)
-				assert.Equal(t, v1alpha1.ConditionTypeContentRemaining, p.Status.Conditions[0].Type)
-				assert.Equal(t, v1alpha1.ConditionStatusTrue, p.Status.Conditions[0].Status)
-				assert.Equal(t, v1alpha1.ConditionReasonResourcesRemaining, p.Status.Conditions[0].Reason)
+				assert.Equal(t, pwv1alpha1.ConditionTypeContentRemaining, p.Status.Conditions[0].Type)
+				assert.Equal(t, pwv1alpha1.ConditionStatusTrue, p.Status.Conditions[0].Status)
+				assert.Equal(t, pwv1alpha1.ConditionReasonResourcesRemaining, p.Status.Conditions[0].Reason)
 				assert.NotEmpty(t, p.Status.Conditions[0].Message)
 				assert.NotNil(t, p.Status.Conditions[0].Details)
 
-				var remainingResources []v1alpha1.RemainingContentResource
+				var remainingResources []pwv1alpha1.RemainingContentResource
 				assert.NoError(t, json.Unmarshal(p.Status.Conditions[0].Details, &remainingResources))
 				assert.Len(t, remainingResources, 1)
 				assert.Equal(t, "v1", remainingResources[0].APIGroup)
@@ -249,9 +247,9 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 				CommonReconciler: CommonReconciler{
 					Client:         c,
 					ControllerName: "test",
-					ProjectWorkspaceConfig: &config.ProjectWorkspaceConfig{
-						Project: config.ProjectConfig{
-							ResourcesBlockingDeletion: []config.GroupVersionKind{
+					ProjectWorkspaceConfigSpec: pwv1alpha1.ProjectWorkspaceConfigSpec{
+						Project: pwv1alpha1.ProjectConfig{
+							ResourcesBlockingDeletion: []metav1.GroupVersionKind{
 								{
 									Group:   "",
 									Version: "v1",
@@ -293,7 +291,7 @@ func newRequest(obj client.Object) ctrl.Request {
 	}
 }
 
-func namespaceCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, expectation bool) *corev1.Namespace {
+func namespaceCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, expectation bool) *corev1.Namespace {
 	ns := &corev1.Namespace{}
 	err := c.Get(ctx, types.NamespacedName{Name: p.Status.Namespace}, ns)
 	if expectation {
@@ -305,7 +303,7 @@ func namespaceCreatedForProject(t *testing.T, ctx context.Context, c client.Clie
 	return ns
 }
 
-func clusterRoleCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, role v1alpha1.ProjectMemberRole, expectation bool, expectedRules int) {
+func clusterRoleCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedRules int) {
 	cr := &rbacv1.ClusterRole{}
 	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRole(p, role)}, cr)
 	if expectation {
@@ -319,7 +317,7 @@ func clusterRoleCreatedForProject(t *testing.T, ctx context.Context, c client.Cl
 	}
 }
 
-func clusterRoleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, role v1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
+func clusterRoleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	crb := &rbacv1.ClusterRoleBinding{}
 	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRole(p, role)}, crb)
 	if expectation {
@@ -333,7 +331,7 @@ func clusterRoleBindingCreatedForProject(t *testing.T, ctx context.Context, c cl
 	}
 }
 
-func roleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *v1alpha1.Project, role v1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
+func roleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	rb := &rbacv1.RoleBinding{}
 	err := c.Get(ctx, types.NamespacedName{Name: roleBindingForRole(role), Namespace: p.Status.Namespace}, rb)
 	if expectation {
