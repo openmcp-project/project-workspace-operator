@@ -29,6 +29,8 @@ var (
 	Scheme = runtime.NewScheme()
 
 	deleteFinalizer = pwv1alpha1.GroupVersion.Group
+
+	ControllerName = "project-workspace-operator"
 )
 
 func init() {

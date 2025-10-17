@@ -44,6 +44,11 @@ spec:
           spec:
             description: ProjectWorkspaceConfigSpec defines the desired state of ProjectWorkspaceConfig
             properties:
+              memberOverridesName:
+                description: |-
+                  MemberOverridesName is the name of the MemberOverrides resource that should be used to manage admin access to the projects and workspaces.
+                  Leave empty to disable.
+                type: string
               project:
                 description: ProjectConfig contains the configuration for projects.
                 properties:
@@ -119,6 +124,15 @@ spec:
                       - version
                       type: object
                     type: array
+                  webhook:
+                    description: Webhook contains the configuration for the project
+                      webhook.
+                    properties:
+                      disabled:
+                        description: Disabled specifies whether the webhook should
+                          be disabled.
+                        type: boolean
+                    type: object
                 type: object
               workspace:
                 description: WorkspaceConfig contains the configuration for workspaces.
@@ -195,8 +209,20 @@ spec:
                       - version
                       type: object
                     type: array
+                  webhook:
+                    description: Webhook contains the configuration for the workspace
+                      webhook.
+                    properties:
+                      disabled:
+                        description: Disabled specifies whether the webhook should
+                          be disabled.
+                        type: boolean
+                    type: object
                 type: object
             type: object
+        required:
+        - metadata
+        - spec
         type: object
     served: true
     storage: true
