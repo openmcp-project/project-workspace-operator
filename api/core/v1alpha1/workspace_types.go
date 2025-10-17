@@ -74,6 +74,7 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Resulting Namespace",type="string",JSONPath=".status.namespace"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 25",message="Name must not be longer than 25 characters"
+// +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
 type Workspace struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

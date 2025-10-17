@@ -22,3 +22,31 @@ includes:
       COMPONENTS: 'project-workspace-operator'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
+
+tasks:
+  platformservice:
+    desc: "  Generates a PlatformService manifest for the current version. Set the VERBOSITY env var to overwrite the default verbosity level (INFO)."
+    requires:
+      vars:
+      - VERSION
+    vars:
+      VERBOSITY:
+        sh: echo "${VERBOSITY:-INFO}"
+    cmds:
+    - cmd: |
+        cat << EOF
+        apiVersion: openmcp.cloud/v1alpha1
+        kind: PlatformService
+        metadata:
+          name: project-workspace
+        spec:
+          image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
+          verbosity: {{.VERBOSITY}}
+          initCommand:
+          - platformservice
+          - init
+          runCommand:
+          - platformservice
+          - run
+        EOF
+      silent: true

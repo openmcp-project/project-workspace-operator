@@ -47,6 +47,7 @@ func (s Subject) RbacV1() rbacv1.Subject {
 // MemberOverrides is a resource used to Manage admin access to the Project/Workspace operator resources.
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
 type MemberOverrides struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

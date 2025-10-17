@@ -15,7 +15,7 @@ func Test_NewProjectWorkspaceOperatorCommand(t *testing.T) {
 	assert.True(t, cmd.HasSubCommands())
 
 	cmds := cmd.Commands()
-	assert.Len(t, cmds, 2)
+	assert.Len(t, cmds, 3)
 
 	cmdNames := []string{}
 	for _, c := range cmds {

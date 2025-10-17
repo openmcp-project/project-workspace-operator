@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/openmcp-project/project-workspace-operator/cmd/project-workspace-operator/app"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
@@ -59,10 +60,10 @@ func NewProjectWorkspaceOperatorCommand() *cobra.Command {
 			return fmt.Errorf("no command specified")
 		},
 	}
-	cmd.PersistentFlags().AddGoFlagSet(goflag.CommandLine)
 
 	cmd.AddCommand(newProjectWorkspaceOperatorInitCommand(options))
 	cmd.AddCommand(newProjectWorkspaceOperatorStartCommand(options))
+	cmd.AddCommand(app.NewPlatformServiceProjectWorkspaceCommand())
 
 	return cmd
 }
@@ -172,7 +173,8 @@ func newProjectWorkspaceOperatorInitCommand(options *Options) *cobra.Command {
 		},
 	}
 
-	options.AddInitFlags(cmd.Flags(), cmd.PersistentFlags())
+	options.AddInitFlags(cmd.Flags())
+	cmd.Flags().AddGoFlagSet(goflag.CommandLine)
 
 	return cmd
 }
@@ -189,7 +191,8 @@ func newProjectWorkspaceOperatorStartCommand(options *Options) *cobra.Command {
 		},
 	}
 
-	options.AddStartFlags(cmd.Flags(), cmd.PersistentFlags())
+	options.AddStartFlags(cmd.Flags())
+	cmd.Flags().AddGoFlagSet(goflag.CommandLine)
 
 	return cmd
 }
@@ -289,7 +292,7 @@ func (o *Options) addCommonFlags(fs *flag.FlagSet) {
 	fs.StringVar(&o.CrateClusterPath, "crate-cluster", "", "Path to the crate cluster kubeconfig file or directory containing either a kubeconfig or host, token, and ca file. Leave empty to use in-cluster config.")
 }
 
-func (o *Options) AddStartFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
+func (o *Options) AddStartFlags(fs *flag.FlagSet) {
 	// standard stuff
 	fs.StringVar(&o.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -307,7 +310,7 @@ func (o *Options) AddStartFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
 	// fs.StringVar(o.MemberOverridesFlags.MemberOverridesName, "use-member-overrides-name", "", "Specify a MemberOverrides resources name.")
 }
 
-func (o *Options) AddInitFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
+func (o *Options) AddInitFlags(fs *flag.FlagSet) {
 	// add common flags
 	o.addCommonFlags(fs)
 }
