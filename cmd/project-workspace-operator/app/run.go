@@ -195,6 +195,7 @@ func (o *RunOptions) Complete(ctx context.Context) error {
 	return nil
 }
 
+//nolint:gocyclo
 func (o *RunOptions) Run(ctx context.Context) error {
 	if err := o.PlatformCluster.InitializeClient(providerscheme.InstallOperatorAPIsPlatform(runtime.NewScheme())); err != nil {
 		return err

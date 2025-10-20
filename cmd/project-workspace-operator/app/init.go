@@ -62,7 +62,7 @@ func (o *InitOptions) Complete(ctx context.Context) error {
 }
 
 func (o *InitOptions) Run(ctx context.Context) error {
-	if err := o.PlatformCluster.InitializeClient(providerscheme.InstallCRDAPIs(runtime.NewScheme())); err != nil {
+	if err := o.PlatformCluster.InitializeClient(providerscheme.InstallOperatorAPIsPlatform(runtime.NewScheme())); err != nil {
 		return err
 	}
 
@@ -72,7 +72,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 
 	log.Info("Getting access to the onboarding cluster")
 	onboardingScheme := runtime.NewScheme()
-	providerscheme.InstallCRDAPIs(onboardingScheme)
+	providerscheme.InstallOperatorAPIsOnboarding(onboardingScheme)
 
 	providerSystemNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
 	if providerSystemNamespace == "" {

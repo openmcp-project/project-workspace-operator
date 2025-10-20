@@ -7,23 +7,17 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	deployv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
-// InstallCRDAPIs installs the CRD APIs in the scheme.
-// This is used for the init subcommand.
-func InstallCRDAPIs(scheme *runtime.Scheme) *runtime.Scheme {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(apiextv1.AddToScheme(scheme))
-
-	return scheme
-}
-
 func InstallOperatorAPIsPlatform(scheme *runtime.Scheme) *runtime.Scheme {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(clustersv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(pwv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
 
 	return scheme
 }
