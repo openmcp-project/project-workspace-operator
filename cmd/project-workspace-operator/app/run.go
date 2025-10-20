@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -23,12 +24,12 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
+	deployv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
-
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
 )
 
 var setupLog logging.Logger
@@ -232,12 +233,75 @@ func (o *RunOptions) Run(ctx context.Context) error {
 						Resources: []string{"projects", "workspaces", "memberoverrides"},
 						Verbs:     []string{"*"},
 					},
+					{
+						APIGroups: []string{"apiextensions.k8s.io"},
+						Resources: []string{"customresourcedefinitions"},
+						Verbs:     []string{"list", "get"},
+					},
+					{
+						APIGroups: []string{""},
+						Resources: []string{"namespaces"},
+						Verbs:     []string{"*"},
+					},
+					{
+						APIGroups: []string{"rbac.authorization.k8s.io"},
+						Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
+						Verbs:     []string{"*"},
+					},
 				},
 			},
 		})
 
 	if err != nil {
 		return fmt.Errorf("error creating/updating onboarding cluster: %w", err)
+	}
+
+	setupLog.Info("Listing ServiceProvider resources")
+	sps := &deployv1alpha1.ServiceProviderList{}
+	if err := o.PlatformCluster.Client().List(ctx, sps); err != nil {
+		return fmt.Errorf("unable to list ServiceProvider resources: %w", err)
+	}
+	if len(sps.Items) > 0 {
+		setupLog.Info("Listing CRDs on the onboarding cluster to lookup service resources")
+		crds := apiextv1.CustomResourceDefinitionList{}
+		if err := onboardingCluster.Client().List(ctx, &crds); err != nil {
+			return fmt.Errorf("unable to list CRDs on onboarding cluster: %w", err)
+		}
+		if pwc.Spec.Workspace.AdditionalPermissions == nil {
+			pwc.Spec.Workspace.AdditionalPermissions = make(map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule)
+		}
+		groupToResources := map[string][]string{}
+		for _, sp := range sps.Items {
+			managedResources := sp.Status.Resources
+			for _, r := range managedResources {
+				// lookup plural name of resource from CRD
+				found := false
+				for _, crd := range crds.Items {
+					if crd.Spec.Group == r.Group && crd.Spec.Names.Kind == r.Kind {
+						groupToResources[r.Group] = append(groupToResources[r.Group], crd.Spec.Names.Plural)
+						setupLog.Info("Identified service resource", "serviceProvider", sp.Name, "group", r.Group, "kind", r.Kind, "resource", fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group))
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("unable to find CRD for resource kind '%s' in api group '%s' managed by ServiceProvider %s", r.Kind, r.Group, sp.Name)
+				}
+			}
+		}
+		// add permissions to pwc spec
+		for apigroup, resources := range groupToResources {
+			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin], rbacv1.PolicyRule{
+				APIGroups: []string{apigroup},
+				Resources: resources,
+				Verbs:     []string{"*"},
+			})
+			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView], rbacv1.PolicyRule{
+				APIGroups: []string{apigroup},
+				Resources: resources,
+				Verbs:     []string{"get", "list", "watch"},
+			})
+		}
 	}
 
 	webhookServer := webhook.NewServer(webhook.Options{
@@ -277,6 +341,12 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, pwc.Spec.MemberOverridesName); err != nil {
 			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
 		}
+	}
+
+	rbacSetup := core.NewRBACSetup(setupLog.Logr(), onboardingCluster.Client(), core.ControllerName, pwc.Spec)
+	if err := rbacSetup.EnsureResources(ctx); err != nil {
+		setupLog.Error(err, "unable to create or update RBAC resources")
+		os.Exit(1)
 	}
 
 	commonReconciler := core.CommonReconciler{
