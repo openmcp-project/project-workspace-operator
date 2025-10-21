@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // ProjectWorkspaceConfigSpec defines the desired state of ProjectWorkspaceConfig
@@ -15,6 +16,9 @@ type ProjectWorkspaceConfigSpec struct {
 	// Leave empty to disable.
 	// +optional
 	MemberOverridesName string `json:"memberOverridesName,omitempty"`
+	// Webhook contains the configuration for the webhooks.
+	// +optional
+	Webhook WebhookConfig `json:"webhook"`
 }
 
 // ProjectWorkspaceConfig is the Schema for the ProjectWorkspaceConfigs API
@@ -35,9 +39,6 @@ type ProjectConfig struct {
 	// AdditionalPermissions defines additional permissions users should have in a project, depending on their role.
 	// +optional
 	AdditionalPermissions map[ProjectMemberRole][]rbacv1.PolicyRule `json:"additionalPermissions,omitempty"`
-	// Webhook contains the configuration for the project webhook.
-	// +optional
-	Webhook WebhookConfig `json:"webhook"`
 }
 
 // WorkspaceConfig contains the configuration for workspaces.
@@ -47,15 +48,18 @@ type WorkspaceConfig struct {
 	// AdditionalPermissions defines additional permissions users should have in a workspace, depending on their role.
 	// +optional
 	AdditionalPermissions map[WorkspaceMemberRole][]rbacv1.PolicyRule `json:"additionalPermissions,omitempty"`
-	// Webhook contains the configuration for the workspace webhook.
-	// +optional
-	Webhook WebhookConfig `json:"webhook"`
 }
 
 type WebhookConfig struct {
-	// Disabled specifies whether the webhook should be disabled.
+	// Disabled specifies whether the webhooks should be disabled.
 	// +optional
 	Disabled bool `json:"disabled"`
+	// TargetPort is the port of the pod the webhook server listens on.
+	// May be a port number or a named port of the pod.
+	// Defaults to 9443, if not specified.
+	// +kubebuilder:validation:XIntOrString
+	// +optional
+	TargetPort *intstr.IntOrString `json:"targetPort,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -73,6 +77,10 @@ func init() {
 
 // SetDefaults sets the default values for the project workspace configuration when not set.
 func (pwc *ProjectWorkspaceConfig) SetDefaults() {
+	if pwc.Spec.Webhook.TargetPort == nil || pwc.Spec.Webhook.TargetPort.IntValue() == 0 {
+		defaultPort := intstr.FromInt(9443)
+		pwc.Spec.Webhook.TargetPort = &defaultPort
+	}
 }
 
 // Validate validates the project workspace configuration.

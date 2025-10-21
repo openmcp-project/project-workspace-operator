@@ -18,7 +18,7 @@ includes:
       NESTED_MODULES: api
       API_DIRS: '{{.ROOT_DIR}}/api/core/v1alpha1/...'
       MANIFEST_OUT: '{{.ROOT_DIR}}/api/crds/manifests'
-      CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/test/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
+      CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
       COMPONENTS: 'project-workspace-operator'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
@@ -48,5 +48,14 @@ tasks:
           runCommand:
           - platformservice
           - run
+          extraVolumes:
+          - name: webhooks-tls
+            secret:
+              defaultMode: 420
+              secretName: project-workspace-operator-webhooks-tls
+          extraVolumeMounts:
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: webhooks-tls
+            readOnly: true
         EOF
       silent: true

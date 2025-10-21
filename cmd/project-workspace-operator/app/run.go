@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -210,6 +211,10 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	if err := o.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: o.ProviderName}, pwc); err != nil {
 		return fmt.Errorf("unable to get ProjectWorkspaceConfig '%s': %w", o.ProviderName, err)
 	}
+	pwc.SetDefaults()
+	if err := pwc.Validate(); err != nil {
+		return fmt.Errorf("invalid ProjectWorkspaceConfig '%s': %w", o.ProviderName, err)
+	}
 
 	setupLog.Info("Getting access to the onboarding cluster")
 	onboardingScheme := runtime.NewScheme()
@@ -305,8 +310,41 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		}
 	}
 
+	webhookPort := pwc.Spec.Webhook.TargetPort.IntValue()
+	if webhookPort == 0 {
+		// this should only have happened if the user configured a named port
+		portName := pwc.Spec.Webhook.TargetPort.StrVal
+		if portName == "" {
+			return fmt.Errorf("invalid webhook target port configuration: %v", pwc.Spec.Webhook.TargetPort)
+		}
+		setupLog.Info("Resolving webhook port from named port", "portName", portName)
+		pod := &corev1.Pod{}
+		pod.Name = os.Getenv(openmcpconst.EnvVariablePodName)
+		pod.Namespace = os.Getenv(openmcpconst.EnvVariablePodNamespace)
+		if pod.Name == "" || pod.Namespace == "" {
+			return fmt.Errorf("environment variables %s and %s must be set to resolve webhook port from named port", openmcpconst.EnvVariablePodName, openmcpconst.EnvVariablePodNamespace)
+		}
+		if err := o.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: pod.Name, Namespace: pod.Namespace}, pod); err != nil {
+			return fmt.Errorf("unable to get pod '%s/%s' to resolve webhook port from named port: %w", pod.Namespace, pod.Name, err)
+		}
+		namedPorts := pod.Spec.Containers[0].Ports
+		found := false
+		for _, p := range namedPorts {
+			if p.Name == portName {
+				webhookPort = int(p.ContainerPort)
+				found = true
+				setupLog.Info("Resolved webhook port from named port", "portName", portName, "port", webhookPort)
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("unable to find named port '%s' in pod '%s/%s' to resolve webhook port", portName, pod.Namespace, pod.Name)
+		}
+	}
+
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: o.WebhookTLSOpts,
+		Port:    webhookPort,
 	})
 
 	mgr, err := ctrl.NewManager(onboardingCluster.RESTConfig(), ctrl.Options{
@@ -333,12 +371,10 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to create manager: %w", err)
 	}
 
-	if !pwc.Spec.Project.Webhook.Disabled {
+	if !pwc.Spec.Webhook.Disabled {
 		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(mgr, pwc.Spec.MemberOverridesName); err != nil {
 			return fmt.Errorf("unable to setup Project webhook: %w", err)
 		}
-	}
-	if !pwc.Spec.Workspace.Webhook.Disabled {
 		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, pwc.Spec.MemberOverridesName); err != nil {
 			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
 		}
