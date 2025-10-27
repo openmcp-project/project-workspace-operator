@@ -132,15 +132,6 @@ spec:
                     description: Disabled specifies whether the webhooks should be
                       disabled.
                     type: boolean
-                  targetPort:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    description: |-
-                      TargetPort is the port of the pod the webhook server listens on.
-                      May be a port number or a named port of the pod.
-                      Defaults to 9443, if not specified.
-                    x-kubernetes-int-or-string: true
                 type: object
               workspace:
                 description: WorkspaceConfig contains the configuration for workspaces.

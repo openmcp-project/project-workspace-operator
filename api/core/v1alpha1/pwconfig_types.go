@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // ProjectWorkspaceConfigSpec defines the desired state of ProjectWorkspaceConfig
@@ -54,12 +53,6 @@ type WebhookConfig struct {
 	// Disabled specifies whether the webhooks should be disabled.
 	// +optional
 	Disabled bool `json:"disabled"`
-	// TargetPort is the port of the pod the webhook server listens on.
-	// May be a port number or a named port of the pod.
-	// Defaults to 9443, if not specified.
-	// +kubebuilder:validation:XIntOrString
-	// +optional
-	TargetPort *intstr.IntOrString `json:"targetPort,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -76,12 +69,7 @@ func init() {
 }
 
 // SetDefaults sets the default values for the project workspace configuration when not set.
-func (pwc *ProjectWorkspaceConfig) SetDefaults() {
-	if pwc.Spec.Webhook.TargetPort == nil || pwc.Spec.Webhook.TargetPort.IntValue() == 0 {
-		defaultPort := intstr.FromInt(9443)
-		pwc.Spec.Webhook.TargetPort = &defaultPort
-	}
-}
+func (pwc *ProjectWorkspaceConfig) SetDefaults() {}
 
 // Validate validates the project workspace configuration.
 func (pwc *ProjectWorkspaceConfig) Validate() error {

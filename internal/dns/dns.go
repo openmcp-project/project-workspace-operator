@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
-	"github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
@@ -226,6 +225,5 @@ func getBaseDomain(gateway *gatewayv1.Gateway) (string, bool) {
 }
 
 func getHostName(baseDomain string, instance *Instance) string {
-	subDomain := controller.NameHashSHAKE128Base32(instance.Name, instance.Namespace)
-	return fmt.Sprintf("%s-%s.%s", instance.SubDomainPrefix, subDomain, baseDomain)
+	return fmt.Sprintf("%s.%s", instance.SubDomainPrefix, baseDomain)
 }

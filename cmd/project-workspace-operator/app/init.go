@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -150,18 +151,13 @@ func (o *InitOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to determine webhook secret name: %w", err)
 	}
 
-	webhookPort, err := resolveWebhookPort(ctx, o.PlatformCluster.Client(), *pwc.Spec.Webhook.TargetPort)
-	if err != nil {
-		return err
-	}
-
 	// setup gateway for webhooks
 	dnsInstance := &dns.Instance{
 		Name:            whServiceName,
 		Namespace:       providerSystemNamespace,
 		SubDomainPrefix: "pwo-webhooks",
 		BackendName:     whServiceName,
-		BackendPort:     int32(webhookPort),
+		BackendPort:     int32(WebhookPortSvc),
 	}
 	dnsReconciler := dns.NewReconciler()
 	timeout := 3 * time.Minute
@@ -214,8 +210,9 @@ func (o *InitOptions) Run(ctx context.Context) error {
 		webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},
 		webhooks.WithWebhookSecret{Name: whSecretName, Namespace: providerSystemNamespace},
 		webhooks.WithRemoteClient{Client: onboardingCluster.Client()},
+		webhooks.WithWebhookServicePort(WebhookPortSvc),
 		webhooks.WithManagedWebhookService{
-			TargetPort: *pwc.Spec.Webhook.TargetPort,
+			TargetPort: intstr.FromInt32(WebhookPortPod),
 			SelectorLabels: map[string]string{
 				"app.kubernetes.io/component":  "controller",
 				"app.kubernetes.io/managed-by": "openmcp-operator",
@@ -224,11 +221,14 @@ func (o *InitOptions) Run(ctx context.Context) error {
 			},
 		},
 	}
+	if o.PlatformCluster.RESTConfig().Host != onboardingCluster.RESTConfig().Host {
+		// create a URL-based webhook otherwise
+		opts = append(opts, webhooks.WithCustomBaseURL(fmt.Sprintf("https://%s:%d", gatewayResult.HostName, WebhookPortSvc)))
+	}
 
 	// webhook options we might or might not support at a later time
 	/*
 		opts = append(opts, webhooks.WithoutCA)
-		opts = append(opts, webhooks.WithCustomBaseURL("todo"))
 		opts = append(opts, webhooks.WithCustomCA{todo})
 	*/
 

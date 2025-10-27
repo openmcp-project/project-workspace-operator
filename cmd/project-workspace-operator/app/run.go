@@ -309,14 +309,9 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		}
 	}
 
-	webhookPort, err := resolveWebhookPort(ctx, o.PlatformCluster.Client(), *pwc.Spec.Webhook.TargetPort)
-	if err != nil {
-		return err
-	}
-
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: o.WebhookTLSOpts,
-		Port:    webhookPort,
+		Port:    WebhookPortPod,
 	})
 
 	mgr, err := ctrl.NewManager(onboardingCluster.RESTConfig(), ctrl.Options{
