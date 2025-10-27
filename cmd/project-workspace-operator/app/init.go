@@ -15,6 +15,7 @@ import (
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	crdutil "github.com/openmcp-project/controller-utils/pkg/crds"
 	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
+	"github.com/openmcp-project/controller-utils/pkg/logging"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
@@ -74,6 +75,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 	}
 
 	log := o.Log.WithName("main")
+	ctx = logging.NewContext(ctx, log)
 	log.Info("Environment", "value", o.Environment)
 	log.Info("ProviderName", "value", o.ProviderName)
 
