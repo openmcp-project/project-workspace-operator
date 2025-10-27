@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
@@ -17,11 +18,13 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
+	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/crds"
 	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
+	"github.com/openmcp-project/project-workspace-operator/internal/dns"
 )
 
 func NewInitCommand(so *SharedOptions) *cobra.Command {
@@ -140,8 +143,70 @@ func (o *InitOptions) Run(ctx context.Context) error {
 
 	suffix := "-webhook"
 	whServiceName := ctrlutils.ShortenToXCharactersUnsafe(o.ProviderName, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
-	suffix = "-webhook-tls"
-	whSecretName := ctrlutils.ShortenToXCharactersUnsafe(o.ProviderName, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
+	whSecretName, err := libutils.WebhookSecretName(o.ProviderName)
+	if err != nil {
+		return fmt.Errorf("unable to determine webhook secret name: %w", err)
+	}
+
+	webhookPort, err := resolveWebhookPort(ctx, o.PlatformCluster.Client(), *pwc.Spec.Webhook.TargetPort)
+	if err != nil {
+		return err
+	}
+
+	// setup gateway for webhooks
+	dnsInstance := &dns.Instance{
+		Name:            whServiceName,
+		Namespace:       providerSystemNamespace,
+		SubDomainPrefix: "pwo-webhooks",
+		BackendName:     whServiceName,
+		BackendPort:     int32(webhookPort),
+	}
+	dnsReconciler := dns.NewReconciler()
+	timeout := 3 * time.Minute
+	log.Info("Verifying default Gateway is available", "timeout", timeout.String())
+	waitCtx, cancelCtx := context.WithTimeout(ctx, timeout)
+	defer cancelCtx()
+	var gatewayResult dns.GatewayReconcileResult
+	err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		gatewayResult, err = dnsReconciler.ReconcileGateway(ctx, dnsInstance, o.PlatformCluster)
+		if err != nil {
+			log.Error(err, "Error reconciling Gateway, retrying...")
+			return false, nil
+		}
+		if gatewayResult.RequeueAfter > 0 {
+			log.Debug("Default Gateway is not yet available, retrying...")
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("default Gateway did not become available within %s: %w", timeout.String(), err)
+	}
+	log.Info("Default Gateway is available", "hostName", gatewayResult.HostName)
+
+	log.Info("Waiting for TLS route to become ready", "timeout", timeout.String())
+	waitCtx, cancelCtx = context.WithTimeout(ctx, timeout)
+	defer cancelCtx()
+	err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		if err := dnsReconciler.ReconcileTLSRoute(ctx, dnsInstance, o.PlatformCluster); err != nil {
+			log.Error(err, "Error reconciling TLS route, retrying...")
+			return false, nil
+		}
+		tlsReady, err := dnsReconciler.IsTLSRouteReady(ctx, dnsInstance, o.PlatformCluster)
+		if err != nil {
+			log.Error(err, "Error checking TLS route readiness, retrying...")
+			return false, nil
+		}
+		if !tlsReady {
+			log.Debug("TLS route is not yet ready, retrying...")
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("TLS route did not become ready within %s: %w", timeout.String(), err)
+	}
+	log.Info("TLS route is ready")
 
 	opts := []webhooks.InstallOption{
 		webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},

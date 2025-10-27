@@ -48,14 +48,7 @@ tasks:
           runCommand:
           - platformservice
           - run
-          extraVolumes:
-          - name: webhooks-tls
-            secret:
-              defaultMode: 420
-              secretName: project-workspace-operator-webhooks-tls
-          extraVolumeMounts:
-          - mountPath: /tmp/k8s-webhook-server/serving-certs
-            name: webhooks-tls
-            readOnly: true
+          webhook:
+            enabled: true
         EOF
       silent: true
