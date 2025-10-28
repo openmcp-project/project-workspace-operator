@@ -22,6 +22,7 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/init/crds"
 	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -133,12 +134,20 @@ func (o *Options) run() {
 	}
 
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		// figure out own identity
+		review := &authenticationv1.SelfSubjectReview{}
+		if err := crateClient.Create(runContext, review); err != nil {
+			setupLog.Error(err, "failed to get own identity")
+		}
+		identity := review.Status.UserInfo.Username
+		setupLog.Info("determined own identity to exclude from webhook validation", "identity", identity)
+
+		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 			os.Exit(1)
 		}
 
-		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}

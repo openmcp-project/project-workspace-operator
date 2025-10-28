@@ -92,6 +92,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	identity := "nobody"
+
 	// start webhook server using Manager
 	webhookInstallOptions := &testEnv.WebhookInstallOptions
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -106,10 +108,10 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&Project{}).SetupWebhookWithManager(mgr, "test-override")
+	err = (&Project{}).SetupWebhookWithManager(ctx, mgr, "test-override", identity)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&Workspace{}).SetupWebhookWithManager(mgr, "test-override")
+	err = (&Workspace{}).SetupWebhookWithManager(ctx, mgr, "test-override", identity)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook

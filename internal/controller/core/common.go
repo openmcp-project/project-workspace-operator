@@ -13,8 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -23,6 +21,7 @@ import (
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/entities"
+	"github.com/openmcp-project/project-workspace-operator/api/install"
 )
 
 var (
@@ -34,8 +33,7 @@ var (
 )
 
 func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(Scheme))
-	utilruntime.Must(pwv1alpha1.AddToScheme(Scheme))
+	install.InstallOperatorAPIsOnboarding(Scheme)
 }
 
 type CommonReconciler struct {

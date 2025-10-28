@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	authenticationv1 "k8s.io/api/authentication/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -253,6 +254,11 @@ func (o *RunOptions) Run(ctx context.Context) error {
 						Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
 						Verbs:     []string{"*"},
 					},
+					{
+						APIGroups: []string{"authentication.k8s.io/v1"},
+						Resources: []string{"selfsubjectreviews"},
+						Verbs:     []string{"*"},
+					},
 				},
 			},
 		})
@@ -309,6 +315,14 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		}
 	}
 
+	// figure out own identity
+	review := &authenticationv1.SelfSubjectReview{}
+	if err := onboardingCluster.Client().Create(ctx, review); err != nil {
+		return fmt.Errorf("failed to get own identity: %w", err)
+	}
+	identity := review.Status.UserInfo.Username
+	setupLog.Info("determined own identity to exclude from webhook validation", "identity", identity)
+
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: o.WebhookTLSOpts,
 		Port:    WebhookPortPod,
@@ -339,10 +353,10 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	}
 
 	if !pwc.Spec.Webhook.Disabled {
-		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(mgr, pwc.Spec.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
 			return fmt.Errorf("unable to setup Project webhook: %w", err)
 		}
-		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, pwc.Spec.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
 			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
 		}
 	}

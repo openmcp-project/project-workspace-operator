@@ -12,7 +12,7 @@ webhooks:
       namespace: system
       path: /mutate-core-openmcp-cloud-v1alpha1-project
   failurePolicy: Fail
-  name: mproject.kb.io
+  name: mproject.openmcp.cloud
   rules:
   - apiGroups:
     - core.openmcp.cloud
@@ -32,7 +32,7 @@ webhooks:
       namespace: system
       path: /mutate-core-openmcp-cloud-v1alpha1-workspace
   failurePolicy: Fail
-  name: mworkspace.kb.io
+  name: mworkspace.openmcp.cloud
   rules:
   - apiGroups:
     - core.openmcp.cloud
@@ -58,7 +58,7 @@ webhooks:
       namespace: system
       path: /validate-core-openmcp-cloud-v1alpha1-project
   failurePolicy: Fail
-  name: vproject.kb.io
+  name: vproject.openmcp.cloud
   rules:
   - apiGroups:
     - core.openmcp.cloud
@@ -79,7 +79,7 @@ webhooks:
       namespace: system
       path: /validate-core-openmcp-cloud-v1alpha1-workspace
   failurePolicy: Fail
-  name: vworkspace.kb.io
+  name: vworkspace.openmcp.cloud
   rules:
   - apiGroups:
     - core.openmcp.cloud

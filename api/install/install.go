@@ -1,6 +1,7 @@
 package install
 
 import (
+	authenticationv1 "k8s.io/api/authentication/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -20,8 +21,8 @@ func InstallOperatorAPIsPlatform(scheme *runtime.Scheme) *runtime.Scheme {
 	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(pwv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 
 	return scheme
 }
@@ -30,6 +31,7 @@ func InstallOperatorAPIsOnboarding(scheme *runtime.Scheme) *runtime.Scheme {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(pwv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(authenticationv1.AddToScheme(scheme))
 
 	return scheme
 }
