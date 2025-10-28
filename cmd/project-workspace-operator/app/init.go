@@ -206,7 +206,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 	}
 	log.Info("TLS route is ready")
 
-	opts := []webhooks.InstallOption{
+	installOpts := []webhooks.InstallOption{
 		webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},
 		webhooks.WithWebhookSecret{Name: whSecretName, Namespace: providerSystemNamespace},
 		webhooks.WithRemoteClient{Client: onboardingCluster.Client()},
@@ -221,9 +221,14 @@ func (o *InitOptions) Run(ctx context.Context) error {
 			},
 		},
 	}
+	certOpts := []webhooks.CertOption{
+		webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},
+		webhooks.WithWebhookSecret{Name: whSecretName, Namespace: providerSystemNamespace},
+	}
 	if o.PlatformCluster.RESTConfig().Host != onboardingCluster.RESTConfig().Host {
 		// create a URL-based webhook otherwise
-		opts = append(opts, webhooks.WithCustomBaseURL(fmt.Sprintf("https://%s:%d", gatewayResult.HostName, gatewayResult.TLSPort)))
+		installOpts = append(installOpts, webhooks.WithCustomBaseURL(fmt.Sprintf("https://%s:%d", gatewayResult.HostName, gatewayResult.TLSPort)))
+		certOpts = append(certOpts, webhooks.WithAdditionalDNSNames{gatewayResult.HostName})
 	}
 
 	// webhook options we might or might not support at a later time
@@ -236,10 +241,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 		log.Info("Webhooks are enabled, ensuring required resources ...")
 
 		// Generate webhook certificate
-		if err := webhooks.GenerateCertificate(ctx, o.PlatformCluster.Client(),
-			webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},
-			webhooks.WithWebhookSecret{Name: whSecretName, Namespace: providerSystemNamespace},
-		); err != nil {
+		if err := webhooks.GenerateCertificate(ctx, o.PlatformCluster.Client(), certOpts...); err != nil {
 			return fmt.Errorf("unable to generate webhook certificate: %w", err)
 		}
 
@@ -252,7 +254,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 				&pwv1alpha1.Project{},
 				&pwv1alpha1.Workspace{},
 			},
-			opts...,
+			installOpts...,
 		)
 		if err != nil {
 			return fmt.Errorf("unable to install webhooks: %w", err)
@@ -269,7 +271,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 				&pwv1alpha1.Project{},
 				&pwv1alpha1.Workspace{},
 			},
-			opts...,
+			installOpts...,
 		)
 		if err != nil {
 			return fmt.Errorf("unable to uninstall webhooks: %w", err)
