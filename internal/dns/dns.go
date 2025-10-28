@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/collections/filters"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
@@ -46,6 +47,8 @@ type Instance struct {
 type GatewayReconcileResult struct {
 	// HostName is the hostname that was created for the instance and can be used for DNS records.
 	HostName string
+	// TLSPort is the port under which the gateway accepts TLS traffic.
+	TLSPort int32
 	// Result is the result of the reconciliation.
 	reconcile.Result
 }
@@ -92,10 +95,18 @@ func (r *Reconciler) ReconcileGateway(ctx context.Context, instance *Instance, t
 
 	log.Debug("Base domain found", "baseDomain", baseDomain)
 
+	tlsPort, hasTLSPort := getTLSPort(gateway)
+	if !hasTLSPort {
+		return GatewayReconcileResult{Result: reconcile.Result{}}, fmt.Errorf("gateway either does not have any listeners with TLS protocol or it has multiple ones and none is named 'tls'")
+	}
+
+	log.Debug("TLS port found", "tlsPort", tlsPort)
+
 	hostName := getHostName(baseDomain, instance)
 
 	return GatewayReconcileResult{
 		HostName: hostName,
+		TLSPort:  tlsPort,
 		Result:   reconcile.Result{},
 	}, nil
 }
@@ -226,4 +237,28 @@ func getBaseDomain(gateway *gatewayv1.Gateway) (string, bool) {
 
 func getHostName(baseDomain string, instance *Instance) string {
 	return fmt.Sprintf("%s.%s", instance.SubDomainPrefix, baseDomain)
+}
+
+// retrieves the TLS port from the gateway and a boolean indicating whether a TLS port was found
+// logic as follows:
+// - if the gateway has a single listener with TLS protocol, its port (and true) is returned
+// - if the gateway has multiple TLS listeners and one is named "tls", its port (and true) is returned
+// - in all other cases, (0, false) is returned
+func getTLSPort(gateway *gatewayv1.Gateway) (int32, bool) {
+	tlsListeners := filters.FilterSlice(gateway.Spec.Listeners, func(args ...any) bool {
+		elem := args[0].(gatewayv1.Listener)
+		return elem.Protocol == gatewayv1.TLSProtocolType
+	})
+	if len(tlsListeners) == 0 {
+		return 0, false
+	}
+	if len(tlsListeners) == 1 {
+		return tlsListeners[0].Port, true
+	}
+	for _, listener := range tlsListeners {
+		if listener.Name == "tls" {
+			return listener.Port, true
+		}
+	}
+	return 0, false
 }

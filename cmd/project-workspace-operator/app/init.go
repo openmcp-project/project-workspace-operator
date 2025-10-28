@@ -223,7 +223,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 	}
 	if o.PlatformCluster.RESTConfig().Host != onboardingCluster.RESTConfig().Host {
 		// create a URL-based webhook otherwise
-		opts = append(opts, webhooks.WithCustomBaseURL(fmt.Sprintf("https://%s:%d", gatewayResult.HostName, WebhookPortSvc)))
+		opts = append(opts, webhooks.WithCustomBaseURL(fmt.Sprintf("https://%s:%d", gatewayResult.HostName, gatewayResult.TLSPort)))
 	}
 
 	// webhook options we might or might not support at a later time
