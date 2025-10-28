@@ -64,17 +64,7 @@ func (o *RunOptions) PrintRawOptions(cmd *cobra.Command) {
 	cmd.Println("########## RAW OPTIONS END ##########")
 }
 
-func (o *RunOptions) PrintCompleted(cmd *cobra.Command) {
-	raw := map[string]any{
-		// TODO add options or remove
-	}
-	data, err := yaml.Marshal(raw)
-	if err != nil {
-		cmd.Println(fmt.Errorf("error marshalling completed options: %w", err).Error())
-		return
-	}
-	cmd.Print(string(data))
-}
+func (o *RunOptions) PrintCompleted(cmd *cobra.Command) {}
 
 func (o *RunOptions) PrintCompletedOptions(cmd *cobra.Command) {
 	cmd.Println("########## COMPLETED OPTIONS START ##########")

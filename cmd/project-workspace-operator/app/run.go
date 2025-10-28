@@ -14,6 +14,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -230,38 +231,61 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		WithInterval(10 * time.Second).
 		WithTimeout(30 * time.Minute)
 
-	onboardingCluster, err := clusterAccessManager.CreateAndWaitForCluster(ctx, clustersv1alpha1.PURPOSE_ONBOARDING, clustersv1alpha1.PURPOSE_ONBOARDING,
-		onboardingScheme, []clustersv1alpha1.PermissionsRequest{
-			{
-				Rules: []rbacv1.PolicyRule{
-					{
-						APIGroups: []string{"core.openmcp.cloud"},
-						Resources: []string{"projects", "projects/status", "workspaces", "workspaces/status", "memberoverrides"},
-						Verbs:     []string{"*"},
-					},
-					{
-						APIGroups: []string{"apiextensions.k8s.io"},
-						Resources: []string{"customresourcedefinitions"},
-						Verbs:     []string{"list", "get"},
-					},
-					{
-						APIGroups: []string{""},
-						Resources: []string{"namespaces"},
-						Verbs:     []string{"*"},
-					},
-					{
-						APIGroups: []string{"rbac.authorization.k8s.io"},
-						Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
-						Verbs:     []string{"*"},
-					},
-					{
-						APIGroups: []string{"authentication.k8s.io/v1"},
-						Resources: []string{"selfsubjectreviews"},
-						Verbs:     []string{"*"},
-					},
+	onboadingClusterPermissions := []clustersv1alpha1.PermissionsRequest{
+		{
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{pwv1alpha1.GroupName},
+					Resources: []string{"projects", "projects/status", "workspaces", "workspaces/status"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{pwv1alpha1.GroupName},
+					Resources: []string{"*"},
+					Verbs:     []string{"list", "get"},
+				},
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"list", "get"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"namespaces"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"authentication.k8s.io/v1"},
+					Resources: []string{"selfsubjectreviews"},
+					Verbs:     []string{"*"},
 				},
 			},
+		},
+	}
+	blockingAPIGroups := sets.New[string]()
+	for _, pb := range pwc.Spec.Project.ResourcesBlockingDeletion {
+		if pb.Group != pwv1alpha1.GroupName {
+			blockingAPIGroups.Insert(pb.Group)
+		}
+	}
+	for _, wsb := range pwc.Spec.Workspace.ResourcesBlockingDeletion {
+		if wsb.Group != pwv1alpha1.GroupName {
+			blockingAPIGroups.Insert(wsb.Group)
+		}
+	}
+	for _, bg := range sets.List(blockingAPIGroups) {
+		onboadingClusterPermissions[0].Rules = append(onboadingClusterPermissions[0].Rules, rbacv1.PolicyRule{
+			APIGroups: []string{bg},
+			Resources: []string{"*"},
+			Verbs:     []string{"list", "get"},
 		})
+	}
+	onboardingCluster, err := clusterAccessManager.CreateAndWaitForCluster(ctx, clustersv1alpha1.PURPOSE_ONBOARDING, clustersv1alpha1.PURPOSE_ONBOARDING, onboardingScheme, onboadingClusterPermissions)
 
 	if err != nil {
 		return fmt.Errorf("error creating/updating onboarding cluster: %w", err)
