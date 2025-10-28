@@ -140,7 +140,7 @@ func (o *Options) run() {
 			setupLog.Error(err, "failed to get own identity")
 		}
 		identity := review.Status.UserInfo.Username
-		setupLog.Info("determined own identity to exclude from webhook validation", "identity", identity)
+		setupLog.Info("Determined own identity to exclude from webhook validation", "identity", identity)
 
 		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Project")

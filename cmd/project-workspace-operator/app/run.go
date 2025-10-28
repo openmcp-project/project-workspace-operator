@@ -236,7 +236,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{"core.openmcp.cloud"},
-						Resources: []string{"projects", "workspaces", "memberoverrides"},
+						Resources: []string{"projects", "projects/status", "workspaces", "workspaces/status", "memberoverrides"},
 						Verbs:     []string{"*"},
 					},
 					{
@@ -321,7 +321,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get own identity: %w", err)
 	}
 	identity := review.Status.UserInfo.Username
-	setupLog.Info("determined own identity to exclude from webhook validation", "identity", identity)
+	setupLog.Info("Determined own identity to exclude from webhook validation", "identity", identity)
 
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: o.WebhookTLSOpts,
