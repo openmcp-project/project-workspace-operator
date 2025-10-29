@@ -48,7 +48,5 @@ tasks:
           runCommand:
           - platformservice
           - run
-          webhook:
-            enabled: true
         EOF
       silent: true
