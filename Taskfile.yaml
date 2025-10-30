@@ -18,7 +18,36 @@ includes:
       NESTED_MODULES: api
       API_DIRS: '{{.ROOT_DIR}}/api/core/v1alpha1/...'
       MANIFEST_OUT: '{{.ROOT_DIR}}/api/crds/manifests'
-      CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/test/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
+      CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
       COMPONENTS: 'project-workspace-operator'
+      CRDS_COMPONENTS: 'project-workspace-operator'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
+
+tasks:
+  platformservice:
+    desc: "  Generates a PlatformService manifest for the current version. Set the VERBOSITY env var to overwrite the default verbosity level (INFO)."
+    requires:
+      vars:
+      - VERSION
+    vars:
+      VERBOSITY:
+        sh: echo "${VERBOSITY:-INFO}"
+    cmds:
+    - cmd: |
+        cat << EOF
+        apiVersion: openmcp.cloud/v1alpha1
+        kind: PlatformService
+        metadata:
+          name: project-workspace
+        spec:
+          image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
+          verbosity: {{.VERBOSITY}}
+          initCommand:
+          - platformservice
+          - init
+          runCommand:
+          - platformservice
+          - run
+        EOF
+      silent: true

@@ -1,0 +1,37 @@
+package install
+
+import (
+	authenticationv1 "k8s.io/api/authentication/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	deployv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+)
+
+func InstallOperatorAPIsPlatform(scheme *runtime.Scheme) *runtime.Scheme {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(clustersv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(pwv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
+
+	return scheme
+}
+
+func InstallOperatorAPIsOnboarding(scheme *runtime.Scheme) *runtime.Scheme {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(pwv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(authenticationv1.AddToScheme(scheme))
+
+	return scheme
+}

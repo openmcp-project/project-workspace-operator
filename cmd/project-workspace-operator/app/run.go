@@ -1,0 +1,443 @@
+package app
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	authenticationv1 "k8s.io/api/authentication/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/openmcp-project/controller-utils/pkg/logging"
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
+	deployv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
+	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
+)
+
+var setupLog logging.Logger
+
+func NewRunCommand(so *SharedOptions) *cobra.Command {
+	opts := &RunOptions{
+		SharedOptions: so,
+	}
+	cmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run the Platform Service ProjectWorkspace",
+		Run: func(cmd *cobra.Command, args []string) {
+			opts.PrintRawOptions(cmd)
+			if err := opts.Complete(cmd.Context()); err != nil {
+				panic(fmt.Errorf("error completing options: %w", err))
+			}
+			opts.PrintCompletedOptions(cmd)
+			if opts.DryRun {
+				cmd.Println("=== END OF DRY RUN ===")
+				return
+			}
+			if err := opts.Run(cmd.Context()); err != nil {
+				panic(err)
+			}
+		},
+	}
+	opts.AddFlags(cmd)
+
+	return cmd
+}
+
+type RawRunOptions struct {
+	// kubebuilder default flags
+	MetricsAddr          string `json:"metrics-bind-address"`
+	MetricsCertPath      string `json:"metrics-cert-path"`
+	MetricsCertName      string `json:"metrics-cert-name"`
+	MetricsCertKey       string `json:"metrics-cert-key"`
+	WebhookCertPath      string `json:"webhook-cert-path"`
+	WebhookCertName      string `json:"webhook-cert-name"`
+	WebhookCertKey       string `json:"webhook-cert-key"`
+	EnableLeaderElection bool   `json:"leader-elect"`
+	ProbeAddr            string `json:"health-probe-bind-address"`
+	PprofAddr            string `json:"pprof-bind-address"`
+	SecureMetrics        bool   `json:"metrics-secure"`
+	EnableHTTP2          bool   `json:"enable-http2"`
+}
+
+type RunOptions struct {
+	*SharedOptions
+	RawRunOptions
+
+	// fields filled in Complete()
+	TLSOpts              []func(*tls.Config)
+	WebhookTLSOpts       []func(*tls.Config)
+	MetricsServerOptions metricsserver.Options
+	MetricsCertWatcher   *certwatcher.CertWatcher
+	WebhookCertWatcher   *certwatcher.CertWatcher
+}
+
+func (o *RunOptions) AddFlags(cmd *cobra.Command) {
+	// kubebuilder default flags
+	cmd.Flags().StringVar(&o.MetricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	cmd.Flags().StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	cmd.Flags().StringVar(&o.PprofAddr, "pprof-bind-address", "", "The address the pprof endpoint binds to. Expected format is ':<port>'. Leave empty to disable pprof endpoint.")
+	cmd.Flags().BoolVar(&o.EnableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	cmd.Flags().BoolVar(&o.SecureMetrics, "metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	cmd.Flags().StringVar(&o.WebhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
+	cmd.Flags().StringVar(&o.WebhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
+	cmd.Flags().StringVar(&o.WebhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
+	cmd.Flags().StringVar(&o.MetricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server certificate.")
+	cmd.Flags().StringVar(&o.MetricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
+	cmd.Flags().StringVar(&o.MetricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
+	cmd.Flags().BoolVar(&o.EnableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+}
+
+func (o *RunOptions) Complete(ctx context.Context) error {
+	if err := o.SharedOptions.Complete(); err != nil {
+		return err
+	}
+
+	setupLog = o.Log.WithName("setup")
+	ctrl.SetLogger(o.Log.Logr())
+
+	// kubebuilder default stuff
+
+	// if the enable-http2 flag is false (the default), http/2 should be disabled
+	// due to its vulnerabilities. More specifically, disabling http/2 will
+	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
+	// Rapid Reset CVEs. For more information see:
+	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
+	// - https://github.com/advisories/GHSA-4374-p667-p6c8
+	disableHTTP2 := func(c *tls.Config) {
+		setupLog.Info("Disabling http/2")
+		c.NextProtos = []string{"http/1.1"}
+	}
+
+	if !o.EnableHTTP2 {
+		o.TLSOpts = append(o.TLSOpts, disableHTTP2)
+	}
+
+	// Initial webhook TLS options
+	o.WebhookTLSOpts = o.TLSOpts
+
+	if len(o.WebhookCertPath) > 0 {
+		setupLog.Info("Initializing webhook certificate watcher using provided certificates", "webhook-cert-path", o.WebhookCertPath, "webhook-cert-name", o.WebhookCertName, "webhook-cert-key", o.WebhookCertKey)
+
+		var err error
+		o.WebhookCertWatcher, err = certwatcher.New(
+			filepath.Join(o.WebhookCertPath, o.WebhookCertName),
+			filepath.Join(o.WebhookCertPath, o.WebhookCertKey),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize webhook certificate watcher: %w", err)
+		}
+
+		o.WebhookTLSOpts = append(o.WebhookTLSOpts, func(config *tls.Config) {
+			config.GetCertificate = o.WebhookCertWatcher.GetCertificate
+		})
+	}
+
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.2/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	o.MetricsServerOptions = metricsserver.Options{
+		BindAddress:   o.MetricsAddr,
+		SecureServing: o.SecureMetrics,
+		TLSOpts:       o.TLSOpts,
+	}
+
+	if o.SecureMetrics {
+		// FilterProvider is used to protect the metrics endpoint with authn/authz.
+		// These configurations ensure that only authorized users and service accounts
+		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
+		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.2/pkg/metrics/filters#WithAuthenticationAndAuthorization
+		o.MetricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+	}
+
+	// If the certificate is not specified, controller-runtime will automatically
+	// generate self-signed certificates for the metrics server. While convenient for development and testing,
+	// this setup is not recommended for production.
+	//
+	// TODO(user): If you enable certManager, uncomment the following lines:
+	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
+	// managed by cert-manager for the metrics server.
+	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
+	if len(o.MetricsCertPath) > 0 {
+		setupLog.Info("Initializing metrics certificate watcher using provided certificates", "metrics-cert-path", o.MetricsCertPath, "metrics-cert-name", o.MetricsCertName, "metrics-cert-key", o.MetricsCertKey)
+
+		var err error
+		o.MetricsCertWatcher, err = certwatcher.New(
+			filepath.Join(o.MetricsCertPath, o.MetricsCertName),
+			filepath.Join(o.MetricsCertPath, o.MetricsCertKey),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize metrics certificate watcher: %w", err)
+		}
+
+		o.MetricsServerOptions.TLSOpts = append(o.MetricsServerOptions.TLSOpts, func(config *tls.Config) {
+			config.GetCertificate = o.MetricsCertWatcher.GetCertificate
+		})
+	}
+
+	return nil
+}
+
+//nolint:gocyclo
+func (o *RunOptions) Run(ctx context.Context) error {
+	if err := o.PlatformCluster.InitializeClient(providerscheme.InstallOperatorAPIsPlatform(runtime.NewScheme())); err != nil {
+		return err
+	}
+
+	setupLog = o.Log.WithName("setup")
+	setupLog.Info("Environment", "value", o.Environment)
+	setupLog.Info("ProviderName", "value", o.ProviderName)
+
+	setupLog.Info("Fetching ProjectWorkspaceConfig")
+	pwc := &pwv1alpha1.ProjectWorkspaceConfig{}
+	if err := o.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: o.ProviderName}, pwc); err != nil {
+		return fmt.Errorf("unable to get ProjectWorkspaceConfig '%s': %w", o.ProviderName, err)
+	}
+	pwc.SetDefaults()
+	if err := pwc.Validate(); err != nil {
+		return fmt.Errorf("invalid ProjectWorkspaceConfig '%s': %w", o.ProviderName, err)
+	}
+
+	setupLog.Info("Getting access to the onboarding cluster")
+	onboardingScheme := runtime.NewScheme()
+	providerscheme.InstallOperatorAPIsOnboarding(onboardingScheme)
+
+	providerSystemNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
+	if providerSystemNamespace == "" {
+		return fmt.Errorf("environment variable %s is not set", openmcpconst.EnvVariablePodNamespace)
+	}
+
+	clusterAccessManager := clusteraccess.NewClusterAccessManager(o.PlatformCluster.Client(), core.ControllerName, providerSystemNamespace)
+	clusterAccessManager.WithLogger(&setupLog).
+		WithInterval(10 * time.Second).
+		WithTimeout(30 * time.Minute)
+
+	onboadingClusterPermissions := []clustersv1alpha1.PermissionsRequest{
+		{
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{pwv1alpha1.GroupName},
+					Resources: []string{"projects", "projects/status", "workspaces", "workspaces/status"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{pwv1alpha1.GroupName},
+					Resources: []string{"*"},
+					Verbs:     []string{"list", "get"},
+				},
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"list", "get"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"namespaces"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"authentication.k8s.io/v1"},
+					Resources: []string{"selfsubjectreviews"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+	}
+	blockingAPIGroups := sets.New[string]()
+	for _, pb := range pwc.Spec.Project.ResourcesBlockingDeletion {
+		if pb.Group != pwv1alpha1.GroupName {
+			blockingAPIGroups.Insert(pb.Group)
+		}
+	}
+	for _, wsb := range pwc.Spec.Workspace.ResourcesBlockingDeletion {
+		if wsb.Group != pwv1alpha1.GroupName {
+			blockingAPIGroups.Insert(wsb.Group)
+		}
+	}
+	for _, bg := range sets.List(blockingAPIGroups) {
+		onboadingClusterPermissions[0].Rules = append(onboadingClusterPermissions[0].Rules, rbacv1.PolicyRule{
+			APIGroups: []string{bg},
+			Resources: []string{"*"},
+			Verbs:     []string{"list", "get"},
+		})
+	}
+	onboardingCluster, err := clusterAccessManager.CreateAndWaitForCluster(ctx, clustersv1alpha1.PURPOSE_ONBOARDING, clustersv1alpha1.PURPOSE_ONBOARDING, onboardingScheme, onboadingClusterPermissions)
+
+	if err != nil {
+		return fmt.Errorf("error creating/updating onboarding cluster: %w", err)
+	}
+
+	setupLog.Info("Listing ServiceProvider resources")
+	sps := &deployv1alpha1.ServiceProviderList{}
+	if err := o.PlatformCluster.Client().List(ctx, sps); err != nil {
+		return fmt.Errorf("unable to list ServiceProvider resources: %w", err)
+	}
+	if len(sps.Items) > 0 {
+		setupLog.Info("Listing CRDs on the onboarding cluster to lookup service resources")
+		crds := apiextv1.CustomResourceDefinitionList{}
+		if err := onboardingCluster.Client().List(ctx, &crds); err != nil {
+			return fmt.Errorf("unable to list CRDs on onboarding cluster: %w", err)
+		}
+		if pwc.Spec.Workspace.AdditionalPermissions == nil {
+			pwc.Spec.Workspace.AdditionalPermissions = make(map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule)
+		}
+		groupToResources := map[string][]string{}
+		for _, sp := range sps.Items {
+			managedResources := sp.Status.Resources
+			for _, r := range managedResources {
+				// lookup plural name of resource from CRD
+				found := false
+				for _, crd := range crds.Items {
+					if crd.Spec.Group == r.Group && crd.Spec.Names.Kind == r.Kind {
+						groupToResources[r.Group] = append(groupToResources[r.Group], crd.Spec.Names.Plural)
+						setupLog.Info("Identified service resource", "serviceProvider", sp.Name, "group", r.Group, "kind", r.Kind, "resource", fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group))
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("unable to find CRD for resource kind '%s' in api group '%s' managed by ServiceProvider %s", r.Kind, r.Group, sp.Name)
+				}
+			}
+		}
+		// add permissions to pwc spec
+		for apigroup, resources := range groupToResources {
+			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin], rbacv1.PolicyRule{
+				APIGroups: []string{apigroup},
+				Resources: resources,
+				Verbs:     []string{"*"},
+			})
+			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView], rbacv1.PolicyRule{
+				APIGroups: []string{apigroup},
+				Resources: resources,
+				Verbs:     []string{"get", "list", "watch"},
+			})
+		}
+	}
+
+	// figure out own identity
+	review := &authenticationv1.SelfSubjectReview{}
+	if err := onboardingCluster.Client().Create(ctx, review); err != nil {
+		return fmt.Errorf("failed to get own identity: %w", err)
+	}
+	identity := review.Status.UserInfo.Username
+	setupLog.Info("Determined own identity to exclude from webhook validation", "identity", identity)
+
+	webhookServer := webhook.NewServer(webhook.Options{
+		TLSOpts: o.WebhookTLSOpts,
+		Port:    WebhookPortPod,
+	})
+
+	mgr, err := ctrl.NewManager(onboardingCluster.RESTConfig(), ctrl.Options{
+		Scheme:                 onboardingScheme,
+		Metrics:                o.MetricsServerOptions,
+		WebhookServer:          webhookServer,
+		HealthProbeBindAddress: o.ProbeAddr,
+		PprofBindAddress:       o.PprofAddr,
+		LeaderElection:         o.EnableLeaderElection,
+		LeaderElectionID:       "github.com/openmcp-project/platform-service-project-workspace",
+		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+		// when the Manager ends. This requires the binary to immediately end when the
+		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+		// speeds up voluntary leader transitions as the new leader don't have to wait
+		// LeaseDuration time first.
+		//
+		// In the default scaffold provided, the program ends immediately after
+		// the manager stops, so would be fine to enable this option. However,
+		// if you are doing or is intended to do any operation such as perform cleanups
+		// after the manager stops then its usage might be unsafe.
+		// LeaderElectionReleaseOnCancel: true,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to create manager: %w", err)
+	}
+
+	if !pwc.Spec.Webhook.Disabled {
+		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
+			return fmt.Errorf("unable to setup Project webhook: %w", err)
+		}
+		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
+			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
+		}
+	}
+
+	rbacSetup := core.NewRBACSetup(setupLog.Logr(), onboardingCluster.Client(), core.ControllerName, pwc.Spec)
+	if err := rbacSetup.EnsureResources(ctx); err != nil {
+		setupLog.Error(err, "unable to create or update RBAC resources")
+		os.Exit(1)
+	}
+
+	commonReconciler := core.CommonReconciler{
+		Client:                     mgr.GetClient(),
+		ControllerName:             core.ControllerName,
+		ProjectWorkspaceConfigSpec: pwc.Spec,
+	}
+
+	if err = (&core.ProjectReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		CommonReconciler: commonReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create Project controller: %w", err)
+	}
+
+	if err = (&core.WorkspaceReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		CommonReconciler: commonReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create Workspace controller: %w", err)
+	}
+
+	if o.MetricsCertWatcher != nil {
+		setupLog.Info("Adding metrics certificate watcher to manager")
+		if err := mgr.Add(o.MetricsCertWatcher); err != nil {
+			return fmt.Errorf("unable to add metrics certificate watcher to manager: %w", err)
+		}
+	}
+
+	if o.WebhookCertWatcher != nil {
+		setupLog.Info("Adding webhook certificate watcher to manager")
+		if err := mgr.Add(o.WebhookCertWatcher); err != nil {
+			return fmt.Errorf("unable to add webhook certificate watcher to manager: %w", err)
+		}
+	}
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to set up health check: %w", err)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		return fmt.Errorf("unable to set up ready check: %w", err)
+	}
+
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		return fmt.Errorf("problem running manager: %w", err)
+	}
+
+	return nil
+}

@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 var (
@@ -31,11 +31,12 @@ var (
 	}
 )
 
-func NewRBACSetup(setupLog logr.Logger, c client.Client, controllerName string) *RBACSetup {
+func NewRBACSetup(setupLog logr.Logger, c client.Client, controllerName string, cfg pwv1alpha1.ProjectWorkspaceConfigSpec) *RBACSetup {
 	return &RBACSetup{
 		log:            setupLog,
 		client:         c,
 		controllerName: controllerName,
+		config:         cfg,
 	}
 }
 
@@ -43,6 +44,7 @@ type RBACSetup struct {
 	log            logr.Logger
 	client         client.Client
 	controllerName string
+	config         pwv1alpha1.ProjectWorkspaceConfigSpec
 }
 
 func (setup *RBACSetup) EnsureResources(ctx context.Context) error {
@@ -58,9 +60,9 @@ func (setup *RBACSetup) EnsureResources(ctx context.Context) error {
 }
 
 func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) error {
-	projectRoles := map[openmcpv1alpha1.ProjectMemberRole][]string{
-		openmcpv1alpha1.ProjectRoleAdmin: AllVerbs,
-		openmcpv1alpha1.ProjectRoleView:  ReadOnlyVerbs,
+	projectRoles := map[pwv1alpha1.ProjectMemberRole][]string{
+		pwv1alpha1.ProjectRoleAdmin: AllVerbs,
+		pwv1alpha1.ProjectRoleView:  ReadOnlyVerbs,
 	}
 
 	for role, verbs := range projectRoles {
@@ -75,7 +77,7 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 
 			clusterRole.Rules = []rbacv1.PolicyRule{
 				{
-					APIGroups: []string{openmcpv1alpha1.GroupVersion.Group},
+					APIGroups: []string{pwv1alpha1.GroupVersion.Group},
 					Resources: []string{"workspaces"},
 					Verbs:     verbs,
 				},
@@ -96,13 +98,16 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 				},
 			}
 
-			if role == openmcpv1alpha1.ProjectRoleAdmin {
+			if role == pwv1alpha1.ProjectRoleAdmin {
 				clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 					APIGroups: []string{corev1.GroupName},
 					Resources: []string{"serviceaccounts/token"},
 					Verbs:     []string{"create"},
 				})
 			}
+
+			// add roles from config, if defined
+			clusterRole.Rules = append(clusterRole.Rules, setup.config.Project.AdditionalPermissions[role]...)
 
 			return nil
 		})
@@ -116,9 +121,9 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 }
 
 func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context) error {
-	workspaceRoles := map[openmcpv1alpha1.WorkspaceMemberRole][]string{
-		openmcpv1alpha1.WorkspaceRoleAdmin: AllVerbs,
-		openmcpv1alpha1.WorkspaceRoleView:  ReadOnlyVerbs,
+	workspaceRoles := map[pwv1alpha1.WorkspaceMemberRole][]string{
+		pwv1alpha1.WorkspaceRoleAdmin: AllVerbs,
+		pwv1alpha1.WorkspaceRoleView:  ReadOnlyVerbs,
 	}
 
 	for role, verbs := range workspaceRoles {
@@ -133,7 +138,7 @@ func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context)
 
 			clusterRole.Rules = []rbacv1.PolicyRule{
 				{
-					APIGroups: []string{openmcpv1alpha1.GroupVersion.Group},
+					APIGroups: []string{pwv1alpha1.GroupVersion.Group},
 					Resources: []string{"managedcontrolplanes", "clusteradmins"},
 					Verbs:     verbs,
 				},
@@ -158,13 +163,16 @@ func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context)
 				},
 			}
 
-			if role == openmcpv1alpha1.WorkspaceRoleAdmin {
+			if role == pwv1alpha1.WorkspaceRoleAdmin {
 				clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 					APIGroups: []string{corev1.GroupName},
 					Resources: []string{"serviceaccounts/token"},
 					Verbs:     []string{"create"},
 				})
 			}
+
+			// add roles from config, if defined
+			clusterRole.Rules = append(clusterRole.Rules, setup.config.Workspace.AdditionalPermissions[role]...)
 
 			return nil
 		})

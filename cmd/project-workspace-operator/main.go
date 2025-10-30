@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/openmcp-project/project-workspace-operator/cmd/project-workspace-operator/app"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
@@ -21,13 +22,14 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/init/crds"
 	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	pwocrds "github.com/openmcp-project/project-workspace-operator/api/crds"
 	// +kubebuilder:scaffold:imports
 )
@@ -59,10 +61,10 @@ func NewProjectWorkspaceOperatorCommand() *cobra.Command {
 			return fmt.Errorf("no command specified")
 		},
 	}
-	cmd.PersistentFlags().AddGoFlagSet(goflag.CommandLine)
 
 	cmd.AddCommand(newProjectWorkspaceOperatorInitCommand(options))
 	cmd.AddCommand(newProjectWorkspaceOperatorStartCommand(options))
+	cmd.AddCommand(app.NewPlatformServiceProjectWorkspaceCommand())
 
 	return cmd
 }
@@ -101,16 +103,16 @@ func (o *Options) run() {
 		os.Exit(1)
 	}
 
-	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName)
+	rbacSetup := core.NewRBACSetup(setupLog.Logr(), crateClient, controllerName, o.ProjectWorkspaceConfig.Spec)
 	if err := rbacSetup.EnsureResources(runContext); err != nil {
 		setupLog.Error(err, "unable to create or update RBAC resources")
 		os.Exit(1)
 	}
 
 	commonReconciler := core.CommonReconciler{
-		Client:                 mgr.GetClient(),
-		ControllerName:         controllerName,
-		ProjectWorkspaceConfig: o.ProjectWorkspaceConfig,
+		Client:                     mgr.GetClient(),
+		ControllerName:             controllerName,
+		ProjectWorkspaceConfigSpec: o.ProjectWorkspaceConfig.Spec,
 	}
 
 	if err = (&core.ProjectReconciler{
@@ -132,12 +134,20 @@ func (o *Options) run() {
 	}
 
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err = (&openmcpv1alpha1.Project{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		// figure out own identity
+		review := &authenticationv1.SelfSubjectReview{}
+		if err := crateClient.Create(runContext, review); err != nil {
+			setupLog.Error(err, "failed to get own identity")
+		}
+		identity := review.Status.UserInfo.Username
+		setupLog.Info("Determined own identity to exclude from webhook validation", "identity", identity)
+
+		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 			os.Exit(1)
 		}
 
-		if err = (&openmcpv1alpha1.Workspace{}).SetupWebhookWithManager(mgr, *o.MemberOverridesName); err != nil {
+		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
@@ -172,7 +182,8 @@ func newProjectWorkspaceOperatorInitCommand(options *Options) *cobra.Command {
 		},
 	}
 
-	options.AddInitFlags(cmd.Flags(), cmd.PersistentFlags())
+	options.AddInitFlags(cmd.Flags())
+	cmd.Flags().AddGoFlagSet(goflag.CommandLine)
 
 	return cmd
 }
@@ -189,7 +200,8 @@ func newProjectWorkspaceOperatorStartCommand(options *Options) *cobra.Command {
 		},
 	}
 
-	options.AddStartFlags(cmd.Flags(), cmd.PersistentFlags())
+	options.AddStartFlags(cmd.Flags())
+	cmd.Flags().AddGoFlagSet(goflag.CommandLine)
 
 	return cmd
 }
@@ -225,8 +237,8 @@ func (o *Options) runInit() {
 			setupClient,
 			scheme,
 			[]client.Object{
-				&openmcpv1alpha1.Project{},
-				&openmcpv1alpha1.Workspace{},
+				&pwv1alpha1.Project{},
+				&pwv1alpha1.Workspace{},
 			},
 			installOptions...,
 		)
@@ -274,7 +286,7 @@ type Options struct {
 	CRDFlags               *crds.Flags
 	WebhooksFlags          *webhooks.Flags
 	MemberOverridesName    *string
-	ProjectWorkspaceConfig *config.ProjectWorkspaceConfig
+	ProjectWorkspaceConfig *pwv1alpha1.ProjectWorkspaceConfig
 }
 
 func NewOptions() *Options {
@@ -289,7 +301,7 @@ func (o *Options) addCommonFlags(fs *flag.FlagSet) {
 	fs.StringVar(&o.CrateClusterPath, "crate-cluster", "", "Path to the crate cluster kubeconfig file or directory containing either a kubeconfig or host, token, and ca file. Leave empty to use in-cluster config.")
 }
 
-func (o *Options) AddStartFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
+func (o *Options) AddStartFlags(fs *flag.FlagSet) {
 	// standard stuff
 	fs.StringVar(&o.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -307,7 +319,7 @@ func (o *Options) AddStartFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
 	// fs.StringVar(o.MemberOverridesFlags.MemberOverridesName, "use-member-overrides-name", "", "Specify a MemberOverrides resources name.")
 }
 
-func (o *Options) AddInitFlags(fs *flag.FlagSet, ps *flag.FlagSet) {
+func (o *Options) AddInitFlags(fs *flag.FlagSet) {
 	// add common flags
 	o.addCommonFlags(fs)
 }
@@ -335,7 +347,7 @@ func (o *Options) Complete() error {
 	}
 
 	if o.ProjectWorkspaceConfig == nil {
-		o.ProjectWorkspaceConfig = &config.ProjectWorkspaceConfig{}
+		o.ProjectWorkspaceConfig = &pwv1alpha1.ProjectWorkspaceConfig{}
 	}
 
 	o.ProjectWorkspaceConfig.SetDefaults()

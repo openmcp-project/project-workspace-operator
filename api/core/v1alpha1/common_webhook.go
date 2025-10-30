@@ -3,8 +3,6 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	authv1 "k8s.io/api/authentication/v1"
@@ -57,11 +55,6 @@ func setMetaDataAnnotation(meta metav1.Object, key, value string) { // TODO move
 	}
 	labels[key] = value
 	meta.SetAnnotations(labels)
-}
-
-func isOwnServiceAccount(userinfo authv1.UserInfo) bool {
-	svcAccUsername := fmt.Sprintf("system:serviceaccount:%s:%s", os.Getenv("POD_NAMESPACE"), os.Getenv("POD_SERVICE_ACCOUNT"))
-	return strings.HasSuffix(userinfo.Username, svcAccUsername)
 }
 
 // userInfoFromContext extracts the authv1.UserInfo from the admission.Request available in the context. Returns an error if the request can't be found.
