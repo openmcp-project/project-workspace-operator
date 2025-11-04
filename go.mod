@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
-	github.com/openmcp-project/controller-utils v0.23.3-0.20251029131627-9093055d3d4d
+	github.com/openmcp-project/controller-utils v0.23.3-0.20251104073420-e8f83f726f80
 	github.com/openmcp-project/project-workspace-operator/api v0.19.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.34.1
