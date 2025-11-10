@@ -21,6 +21,7 @@ includes:
       CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
       COMPONENTS: 'project-workspace-operator'
       CRDS_COMPONENTS: 'project-workspace-operator'
+      CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
 
