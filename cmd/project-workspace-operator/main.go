@@ -231,15 +231,25 @@ func (o *Options) runInit() {
 		installOptions := o.WebhooksFlags.InstallOptions
 		installOptions = append(installOptions, webhooks.WithRemoteClient{Client: crateClient})
 
+		webhookTypes := []webhooks.APITypes{
+			{
+				Obj:       &pwv1alpha1.Project{},
+				Validator: true,
+				Defaulter: true,
+			},
+			{
+				Obj:       &pwv1alpha1.Workspace{},
+				Validator: true,
+				Defaulter: true,
+			},
+		}
+
 		// Install webhooks
 		err := webhooks.Install(
 			initContext,
 			setupClient,
 			scheme,
-			[]client.Object{
-				&pwv1alpha1.Project{},
-				&pwv1alpha1.Workspace{},
-			},
+			webhookTypes,
 			installOptions...,
 		)
 		if err != nil {
