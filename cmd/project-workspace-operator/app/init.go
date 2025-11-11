@@ -6,13 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	crdutil "github.com/openmcp-project/controller-utils/pkg/crds"
 	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
@@ -21,6 +14,12 @@ import (
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
+	"github.com/spf13/cobra"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/crds"
@@ -237,6 +236,19 @@ func (o *InitOptions) Run(ctx context.Context) error {
 		opts = append(opts, webhooks.WithCustomCA{todo})
 	*/
 
+	webhookTypes := []webhooks.APITypes{
+		{
+			Obj:       &pwv1alpha1.Project{},
+			Validator: true,
+			Defaulter: true,
+		},
+		{
+			Obj:       &pwv1alpha1.Workspace{},
+			Validator: true,
+			Defaulter: true,
+		},
+	}
+
 	if !pwc.Spec.Webhook.Disabled {
 		log.Info("Webhooks are enabled, ensuring required resources ...")
 
@@ -245,15 +257,14 @@ func (o *InitOptions) Run(ctx context.Context) error {
 			return fmt.Errorf("unable to generate webhook certificate: %w", err)
 		}
 
+		// Compile-time checks to ensure Project implements the required interfaces
+
 		// Install webhooks
 		err := webhooks.Install(
 			ctx,
 			o.PlatformCluster.Client(),
 			onboardingScheme,
-			[]client.Object{
-				&pwv1alpha1.Project{},
-				&pwv1alpha1.Workspace{},
-			},
+			webhookTypes,
 			installOpts...,
 		)
 		if err != nil {
@@ -267,10 +278,7 @@ func (o *InitOptions) Run(ctx context.Context) error {
 			ctx,
 			o.PlatformCluster.Client(),
 			onboardingScheme,
-			[]client.Object{
-				&pwv1alpha1.Project{},
-				&pwv1alpha1.Workspace{},
-			},
+			webhookTypes,
 			installOpts...,
 		)
 		if err != nil {
