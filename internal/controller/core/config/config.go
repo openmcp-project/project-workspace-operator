@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -27,15 +26,21 @@ func LoadConfig(path string) (*pwv1alpha1.ProjectWorkspaceConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
-	cfg := &pwv1alpha1.ProjectWorkspaceConfig{}
-	err = yaml.Unmarshal(data, cfg)
+	raw := map[string]any{}
+	err = yaml.Unmarshal(data, &raw)
 	if err != nil {
-		cfgSpec := &pwv1alpha1.ProjectWorkspaceConfigSpec{}
-		err2 := yaml.Unmarshal(data, cfgSpec)
-		if err2 != nil {
-			return nil, fmt.Errorf("config can neither be parsed as full config nor as spec: %w", errors.Join(err, err2))
-		}
-		cfg.Spec = *cfgSpec
+		return nil, fmt.Errorf("error unmarshaling config file: %w", err)
+	}
+	cfg := &pwv1alpha1.ProjectWorkspaceConfig{}
+	_, hasKind := raw["kind"]
+	_, hasApiVersion := raw["apiVersion"]
+	if hasKind && hasApiVersion {
+		err = yaml.Unmarshal(data, cfg)
+	} else {
+		err = yaml.Unmarshal(data, &cfg.Spec)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config can neither be parsed as full config nor as spec: %w", err)
 	}
 	return cfg, nil
 }
