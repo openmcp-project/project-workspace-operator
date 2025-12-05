@@ -1,0 +1,16 @@
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: ProjectWorkspaceConfig
+metadata:
+  name: project-workspace-config
+spec:
+  project:
+    resourcesBlockingDeletion:
+      - group: ""
+        version: "v1"
+        kind: "Secret"
+
+  workspace:
+    resourcesBlockingDeletion:
+      - group: ""
+        version: "v1"
+        kind: "Secret"

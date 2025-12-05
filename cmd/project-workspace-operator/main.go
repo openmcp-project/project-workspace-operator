@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	goflag "flag"
 	"fmt"
 	"os"
@@ -349,11 +350,21 @@ func (o *Options) Complete() error {
 		return err
 	}
 
+	clog := o.Log.WithName("config")
 	if o.ProjectWorkspaceConfigPath != "" {
+		clog.Info("Loading project workspace config", "path", o.ProjectWorkspaceConfigPath)
 		o.ProjectWorkspaceConfig, err = config.LoadConfig(o.ProjectWorkspaceConfigPath)
 		if err != nil {
 			return err
 		}
+		cfgJson, err := json.Marshal(o.ProjectWorkspaceConfig)
+		if err != nil {
+			clog.Error(err, "Unable to marshal loaded config for logging")
+		} else {
+			clog.Info("Successfully loaded project workspace config", "config", string(cfgJson))
+		}
+	} else {
+		clog.Info("No config argument specified, skipping config loading")
 	}
 
 	if o.ProjectWorkspaceConfig == nil {

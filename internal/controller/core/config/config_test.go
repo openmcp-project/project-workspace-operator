@@ -12,13 +12,27 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	pwConfig, err := config.LoadConfig("./testdata/config_valid.yaml")
+	for _, validConfig := range []string{
+		"./testdata/config_valid.yaml",
+		"./testdata/config_valid2.yaml",
+	} {
+		pwConfig, err := config.LoadConfig(validConfig)
 
-	if assert.NoError(t, err) {
-		assert.NotNil(t, pwConfig)
+		if assert.NoError(t, err) {
+			assert.NotNil(t, pwConfig)
+			resourcesBlockingDeletion := []metav1.GroupVersionKind{
+				{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Secret",
+				},
+			}
+			assert.ElementsMatch(t, pwConfig.Spec.Project.ResourcesBlockingDeletion, resourcesBlockingDeletion)
+			assert.ElementsMatch(t, pwConfig.Spec.Workspace.ResourcesBlockingDeletion, resourcesBlockingDeletion)
+		}
 	}
 
-	pwConfig, err = config.LoadConfig("./testdata/config_invalid.yaml")
+	pwConfig, err := config.LoadConfig("./testdata/config_invalid.yaml")
 
 	if assert.Error(t, err) {
 		assert.Nil(t, pwConfig)
