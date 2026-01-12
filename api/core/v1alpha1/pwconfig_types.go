@@ -5,6 +5,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	EventReasonReconcileFailed    = "ReconcileFailed"
+	EventReasonReconcileSucceeded = "ReconcileSucceeded"
+
+	SourceBuiltin                = "Builtin"
+	SourceProjectWorkspaceConfig = "ProjectWorkspaceConfig"
+	SourceServiceProviderPrefix  = "ServiceProvider"
+)
+
 // ProjectWorkspaceConfigSpec defines the desired state of ProjectWorkspaceConfig
 type ProjectWorkspaceConfigSpec struct {
 	// +optional
