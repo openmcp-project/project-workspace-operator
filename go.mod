@@ -7,7 +7,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.27.5
 	github.com/onsi/gomega v1.39.0
 	github.com/openmcp-project/controller-utils v0.24.0
-	github.com/openmcp-project/project-workspace-operator/api v1.1.1
+	github.com/openmcp-project/project-workspace-operator/api v1.2.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
