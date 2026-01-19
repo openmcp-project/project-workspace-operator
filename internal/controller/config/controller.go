@@ -40,7 +40,7 @@ import (
 const (
 	ControllerName = "pwo-config"
 
-	clusterIDOnboardingDynamic = "onboarding-dynamic"
+	ClusterIDOnboardingDynamic = "onboarding-dynamic"
 )
 
 var (
@@ -64,16 +64,16 @@ var (
 			Source: pwov1alpha1.SourceBuiltin,
 		},
 	}
-	BuiltinPermissibleProjectResources = apiGroupsWithResourcesList{
+	BuiltinPermissibleProjectResources = APIGroupsWithResourcesList{
 		{
-			apiGroups: []string{pwov1alpha1.GroupVersion.String()},
-			resources: []string{"workspaces"},
+			APIGroups: []string{pwov1alpha1.GroupVersion.String()},
+			Resources: []string{"workspaces"},
 		},
 	}
-	BuiltinPermissibleWorkspaceResources = apiGroupsWithResourcesList{
+	BuiltinPermissibleWorkspaceResources = APIGroupsWithResourcesList{
 		{
-			apiGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
-			resources: []string{"managedcontrolplanev2s"},
+			APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+			Resources: []string{"managedcontrolplanev2s"},
 		},
 	}
 )
@@ -83,16 +83,16 @@ var (
 type PWOConfigController struct {
 	providerName                  string
 	platformCluster               *clusters.Cluster
-	car                           advanced.ClusterAccessReconciler
+	Car                           advanced.ClusterAccessReconciler
 	rec                           record.EventRecorder
-	onboardingClusterAccessStatic *clusters.Cluster
+	OnboardingClusterAccessStatic *clusters.Cluster
 
 	// The lock needs to be held when reading or writing any of the fields below.
 	lock                               *sync.RWMutex
 	resourcesBlockingProjectDeletion   []DeletionBlockingResource
 	resourcesBlockingWorkspaceDeletion []DeletionBlockingResource
-	permissibleProjectResources        apiGroupsWithResourcesList
-	permissibleWorkspaceResources      apiGroupsWithResourcesList
+	permissibleProjectResources        APIGroupsWithResourcesList
+	permissibleWorkspaceResources      APIGroupsWithResourcesList
 	// the config allows more precise definition of roles, therefore the 'permissible...' fields are not enough to store the permissions from the config
 	projectPermissionsFromConfig   map[string][]rbacv1.PolicyRule
 	workspacePermissionsFromConfig map[string][]rbacv1.PolicyRule
@@ -100,24 +100,24 @@ type PWOConfigController struct {
 	missingConfig                  bool
 }
 
-type apiGroupsWithResources struct {
-	apiGroups []string
-	resources []string
+type APIGroupsWithResources struct {
+	APIGroups []string
+	Resources []string
 }
-type apiGroupsWithResourcesList []apiGroupsWithResources
+type APIGroupsWithResourcesList []APIGroupsWithResources
 
 // Append appends the given elements to the list and returns the new list.
 // If there is already an entry with the same apiGroups, the resources are merged.
 // Otherwise, a new entry is appended.
-func (l apiGroupsWithResourcesList) Append(elems ...apiGroupsWithResources) apiGroupsWithResourcesList {
+func (l APIGroupsWithResourcesList) Append(elems ...APIGroupsWithResources) APIGroupsWithResourcesList {
 	for _, elem := range elems {
 		found := false
 		for i, existing := range l {
-			a := sets.New(existing.apiGroups...)
-			b := sets.New(elem.apiGroups...)
+			a := sets.New(existing.APIGroups...)
+			b := sets.New(elem.APIGroups...)
 			if a.Equal(b) {
 				found = true
-				existing.resources = append(existing.resources, elem.resources...)
+				existing.Resources = append(existing.Resources, elem.Resources...)
 				l[i] = existing
 				break
 			}
@@ -144,15 +144,15 @@ func NewPWOConfigController(providerName string, platformCluster *clusters.Clust
 	return &PWOConfigController{
 		providerName:                  providerName,
 		platformCluster:               platformCluster,
-		onboardingClusterAccessStatic: onboardingClusterStatic,
-		car: advanced.NewClusterAccessReconciler(platformCluster.Client(), ControllerName).
-			Register(advanced.ExistingCluster(clusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).Build()),
+		OnboardingClusterAccessStatic: onboardingClusterStatic,
+		Car: advanced.NewClusterAccessReconciler(platformCluster.Client(), ControllerName).
+			Register(advanced.ExistingCluster(ClusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).Build()),
 		rec:                                rec,
 		lock:                               &sync.RWMutex{},
 		resourcesBlockingProjectDeletion:   []DeletionBlockingResource{},
 		resourcesBlockingWorkspaceDeletion: []DeletionBlockingResource{},
-		permissibleProjectResources:        []apiGroupsWithResources{},
-		permissibleWorkspaceResources:      []apiGroupsWithResources{},
+		permissibleProjectResources:        []APIGroupsWithResources{},
+		permissibleWorkspaceResources:      []APIGroupsWithResources{},
 	}
 }
 
@@ -219,7 +219,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 		c.workspacePermissionsFromConfig = nil
 		c.missingConfig = true
 		log.Info("Resetting state and deleting AccessRequest because ProjectWorkspaceConfig is missing or in deletion")
-		return c.car.ReconcileDelete(ctx, req)
+		return c.Car.ReconcileDelete(ctx, req)
 	}
 
 	// fetch the config
@@ -239,7 +239,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	}
 	c.missingConfig = false
 
-	if c.onboardingClusterAccessStatic == nil {
+	if c.OnboardingClusterAccessStatic == nil {
 		return nil, reconcile.Result{}, fmt.Errorf("static onboarding cluster access is not available")
 	}
 
@@ -267,8 +267,8 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 
 	// fetch ServiceProvider resources to get their registered resource types
 	log.Debug("Fetching ServiceProvider resources to get registered resource types")
-	newPermissibleProjectResources := apiGroupsWithResourcesList{}
-	newPermissibleWorkspaceResources := apiGroupsWithResourcesList{}
+	newPermissibleProjectResources := APIGroupsWithResourcesList{}
+	newPermissibleWorkspaceResources := APIGroupsWithResourcesList{}
 	sps := &providerv1alpha1.ServiceProviderList{}
 	if err := c.platformCluster.Client().List(ctx, sps); err != nil {
 		return cfg, reconcile.Result{}, fmt.Errorf("failed to list ServiceProviders: %w", err)
@@ -278,7 +278,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	// this is required because we only have the kind, but need the plural form resource name for RBAC
 	log.Debug("Fetching CRDs from the onboarding cluster")
 	crds := &apiextv1.CustomResourceDefinitionList{}
-	if err := c.onboardingClusterAccessStatic.Client().List(ctx, crds); err != nil {
+	if err := c.OnboardingClusterAccessStatic.Client().List(ctx, crds); err != nil {
 		return cfg, reconcile.Result{}, fmt.Errorf("failed to list CRDs from onboarding cluster: %w", err)
 	}
 	pluralNames := map[metav1.GroupVersionKind]string{}
@@ -305,9 +305,9 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 			if !ok {
 				return cfg, reconcile.Result{}, fmt.Errorf("unable to find CRD for kind '%s' with apiVersion '%s/%s' registered by ServiceProvider '%s'", gvk.Kind, gvk.Group, gvk.Version, sp.Name)
 			}
-			agr := apiGroupsWithResources{
-				apiGroups: []string{gvk.Group},
-				resources: []string{pluralName},
+			agr := APIGroupsWithResources{
+				APIGroups: []string{gvk.Group},
+				Resources: []string{pluralName},
 			}
 			// if we allow MCPs on project level, we need the following line
 			// newPermissibleProjectResources = newPermissibleProjectResources.Append(agr)
@@ -357,10 +357,10 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 			},
 		})
 	}
-	if err := c.car.Update(clusterIDOnboardingDynamic, advanced.UpdateTokenAccess(&clustersv1alpha1.TokenConfig{Permissions: permissions})); err != nil {
+	if err := c.Car.Update(ClusterIDOnboardingDynamic, advanced.UpdateTokenAccess(&clustersv1alpha1.TokenConfig{Permissions: permissions})); err != nil {
 		return cfg, reconcile.Result{}, fmt.Errorf("failed to update AccessRequest for onboarding cluster: %w", err)
 	}
-	rr, err := c.car.Reconcile(ctx, req)
+	rr, err := c.Car.Reconcile(ctx, req)
 	if err != nil {
 		return cfg, rr, fmt.Errorf("failed to reconcile cluster access to the onboarding cluster: %w", err)
 	}
@@ -370,7 +370,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	}
 
 	// update internal onboarding cluster access references
-	access, err := c.car.Access(ctx, req, clusterIDOnboardingDynamic)
+	access, err := c.Car.Access(ctx, req, ClusterIDOnboardingDynamic)
 	if err != nil {
 		return cfg, rr, fmt.Errorf("failed to get dynamic onboarding cluster access: %w", err)
 	}
@@ -414,7 +414,7 @@ func (c *PWOConfigController) ProjectPermissionsForRole(ctx context.Context, rol
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
-	permissibleProjectResources := append([]apiGroupsWithResources{}, BuiltinPermissibleProjectResources...)
+	permissibleProjectResources := append([]APIGroupsWithResources{}, BuiltinPermissibleProjectResources...)
 	permissibleProjectResources = append(permissibleProjectResources, c.permissibleProjectResources...)
 	res := []rbacv1.PolicyRule{}
 	tmp, err := permissionsForRoleHelper(roleID, permissibleProjectResources)
@@ -432,7 +432,7 @@ func (c *PWOConfigController) WorkspacePermissionsForRole(ctx context.Context, r
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
-	permissibleWorkspaceResources := append([]apiGroupsWithResources{}, BuiltinPermissibleWorkspaceResources...)
+	permissibleWorkspaceResources := append([]APIGroupsWithResources{}, BuiltinPermissibleWorkspaceResources...)
 	permissibleWorkspaceResources = append(permissibleWorkspaceResources, c.permissibleWorkspaceResources...)
 	res := []rbacv1.PolicyRule{}
 	tmp, err := permissionsForRoleHelper(roleID, permissibleWorkspaceResources)
@@ -445,22 +445,22 @@ func (c *PWOConfigController) WorkspacePermissionsForRole(ctx context.Context, r
 }
 
 // if the logic for project and workspace role assignment diverges in the future, the logic needs to be moved back into the respective functions above
-func permissionsForRoleHelper(roleID string, permissibleResources []apiGroupsWithResources) ([]rbacv1.PolicyRule, error) {
+func permissionsForRoleHelper(roleID string, permissibleResources []APIGroupsWithResources) ([]rbacv1.PolicyRule, error) {
 	res := []rbacv1.PolicyRule{}
 	switch roleID {
 	case AdminRole:
 		for _, agr := range permissibleResources {
 			res = append(res, rbacv1.PolicyRule{
-				APIGroups: agr.apiGroups,
-				Resources: agr.resources,
+				APIGroups: agr.APIGroups,
+				Resources: agr.Resources,
 				Verbs:     []string{"*"},
 			})
 		}
 	case ViewerRole:
 		for _, agr := range permissibleResources {
 			res = append(res, rbacv1.PolicyRule{
-				APIGroups: agr.apiGroups,
-				Resources: agr.resources,
+				APIGroups: agr.APIGroups,
+				Resources: agr.Resources,
 				Verbs:     []string{"get", "list", "watch"},
 			})
 		}
@@ -471,10 +471,10 @@ func permissionsForRoleHelper(roleID string, permissibleResources []apiGroupsWit
 }
 
 func (c *PWOConfigController) OnboardingClusterStatic(ctx context.Context) (*clusters.Cluster, error) {
-	if c.onboardingClusterAccessStatic == nil {
+	if c.OnboardingClusterAccessStatic == nil {
 		return nil, fmt.Errorf("static onboarding cluster access controller not initialized yet")
 	}
-	return c.onboardingClusterAccessStatic, nil
+	return c.OnboardingClusterAccessStatic, nil
 }
 
 func (c *PWOConfigController) OnboardingClusterDynamic(ctx context.Context) (*clusters.Cluster, error) {
