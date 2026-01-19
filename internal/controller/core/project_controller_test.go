@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
 
 const (
@@ -241,25 +242,21 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			ctx := newContext()
 			req := newRequest(tC.initObjs[0])
 
-			sr := &ProjectReconciler{
-				Client: c,
-				Scheme: c.Scheme(),
-				CommonReconciler: CommonReconciler{
-					Client:         c,
-					ControllerName: "test",
-					ProjectWorkspaceConfigSpec: pwv1alpha1.ProjectWorkspaceConfigSpec{
-						Project: pwv1alpha1.ProjectConfig{
-							ResourcesBlockingDeletion: []metav1.GroupVersionKind{
-								{
-									Group:   "",
-									Version: "v1",
-									Kind:    "Secret",
-								},
-							},
+			sr, err := NewProjectReconciler(c.Scheme(), &CommonReconciler{
+				Config: sharedconfig.NewFakeSharedInformation(c, nil, nil, []sharedconfig.DeletionBlockingResource{
+					{
+						GroupVersionKind: metav1.GroupVersionKind{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Secret",
 						},
+						Source: pwv1alpha1.SourceProjectWorkspaceConfig,
 					},
-				},
-			}
+				}, nil),
+				ControllerName: "test",
+			},
+			)
+			assert.NoError(t, err)
 
 			result, err := ctrl.Result{}, error(nil)
 			for i := 0; i < maxReconcileCycles; i++ {

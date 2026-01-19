@@ -8,8 +8,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/json"
 
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,6 +20,8 @@ import (
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/entities"
 	"github.com/openmcp-project/project-workspace-operator/api/install"
+	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
 )
 
 var (
@@ -37,15 +37,18 @@ func init() {
 }
 
 type CommonReconciler struct {
-	client.Client
-	pwv1alpha1.ProjectWorkspaceConfigSpec
+	Config         sharedconfig.SharedInformation
 	ControllerName string
 }
 
 func (r *CommonReconciler) ensureFinalizer(ctx context.Context, o client.Object) error {
 	if !controllerutil.ContainsFinalizer(o, deleteFinalizer) {
+		onboardingCluster, err := r.Config.OnboardingClusterStatic(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get onboarding cluster access: %w", err)
+		}
 		controllerutil.AddFinalizer(o, deleteFinalizer)
-		if err := r.Update(ctx, o); err != nil {
+		if err := onboardingCluster.Client().Update(ctx, o); err != nil {
 			return fmt.Errorf("failed to add finalizer: %w", err)
 		}
 	}
@@ -66,36 +69,45 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 	}
 
 	var namespace string
-	var resourcesBlockingDeletion []metav1.GroupVersionKind
+	var resourcesBlockingDeletion []sharedconfig.DeletionBlockingResource
+	var err error
 
 	if isProject {
 		namespace = project.Status.Namespace
 
-		if len(r.Project.ResourcesBlockingDeletion) == 0 {
+		resourcesBlockingDeletion, err = r.Config.ResourcesBlockingProjectDeletion(ctx)
+		if err != nil {
+			return false, fmt.Errorf("failed to get resources blocking project deletion: %w", err)
+		}
+		if len(resourcesBlockingDeletion) == 0 {
 			return false, nil
 		}
-
-		resourcesBlockingDeletion = r.Project.ResourcesBlockingDeletion
 	} else {
 		namespace = workspace.Status.Namespace
 
-		if len(r.Workspace.ResourcesBlockingDeletion) == 0 {
+		resourcesBlockingDeletion, err = r.Config.ResourcesBlockingWorkspaceDeletion(ctx)
+		if err != nil {
+			return false, fmt.Errorf("failed to get resources blocking workspace deletion: %w", err)
+		}
+		if len(resourcesBlockingDeletion) == 0 {
 			return false, nil
 		}
-
-		resourcesBlockingDeletion = r.Workspace.ResourcesBlockingDeletion
 	}
 
 	remainingResources := make([]unstructured.Unstructured, 0)
 	var remainingResourcesCondition pwv1alpha1.Condition
 
 	log := log.FromContext(ctx)
+	onboardingCluster, err := r.Config.OnboardingClusterDynamic(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get onboarding cluster access: %w", err)
+	}
 
-	for _, gvk := range resourcesBlockingDeletion {
+	for _, br := range resourcesBlockingDeletion {
 		resList := &unstructured.UnstructuredList{}
-		resList.SetGroupVersionKind(config.ToSchemaGVK(gvk))
+		resList.SetGroupVersionKind(config.ToSchemaGVK(br.GroupVersionKind))
 
-		if err := r.List(ctx, resList, client.InNamespace(namespace)); err != nil {
+		if err := onboardingCluster.Client().List(ctx, resList, client.InNamespace(namespace)); err != nil {
 			log.Error(err, "failed to list resources")
 			return false, err
 		}
@@ -155,6 +167,10 @@ func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, de
 	}
 
 	log := log.FromContext(ctx)
+	onboardingCluster, err := r.Config.OnboardingClusterStatic(ctx)
+	if err != nil {
+		return false, reconcile.Result{}, fmt.Errorf("failed to get onboarding cluster access: %w", err)
+	}
 
 	if controllerutil.ContainsFinalizer(o, deleteFinalizer) {
 		if err := deleteFunc(); err != nil {
@@ -167,7 +183,7 @@ func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, de
 		}
 
 		controllerutil.RemoveFinalizer(o, deleteFinalizer)
-		if err := r.Update(ctx, o); err != nil {
+		if err := onboardingCluster.Client().Update(ctx, o); err != nil {
 			return false, reconcile.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 		}
 	}

@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -167,7 +168,7 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Client:         fakeClient,
+				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil),
 				ControllerName: "test-controller",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))
@@ -249,7 +250,7 @@ func Test_CommonReconciler_ensureFinalizer(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Client:         fakeClient,
+				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil),
 				ControllerName: "test-controller",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))

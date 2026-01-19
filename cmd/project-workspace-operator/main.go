@@ -32,6 +32,7 @@ import (
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	pwocrds "github.com/openmcp-project/project-workspace-operator/api/crds"
+	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -110,27 +111,34 @@ func (o *Options) run() {
 		os.Exit(1)
 	}
 
-	commonReconciler := core.CommonReconciler{
-		Client:                     mgr.GetClient(),
-		ControllerName:             controllerName,
-		ProjectWorkspaceConfigSpec: o.ProjectWorkspaceConfig.Spec,
-	}
-
-	if err = (&core.ProjectReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		CommonReconciler: commonReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Project")
+	v1cfg, err := sharedconfig.NewV1Config(o.CrateClusterConfig, o.ProjectWorkspaceConfig)
+	if err != nil {
+		setupLog.Error(err, "unable to initialize shared config")
 		os.Exit(1)
 	}
 
-	if err = (&core.WorkspaceReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		CommonReconciler: commonReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Workspace")
+	commonReconciler := &core.CommonReconciler{
+		ControllerName: controllerName,
+		Config:         v1cfg,
+	}
+
+	pr, err := core.NewProjectReconciler(mgr.GetScheme(), commonReconciler)
+	if err != nil {
+		setupLog.Error(err, "unable to create Project reconciler")
+		os.Exit(1)
+	}
+	if err := pr.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to add Project controller to manager")
+		os.Exit(1)
+	}
+
+	wr, err := core.NewWorkspaceReconciler(mgr.GetScheme(), commonReconciler)
+	if err != nil {
+		setupLog.Error(err, "unable to create Workspace reconciler")
+		os.Exit(1)
+	}
+	if err := wr.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to add Workspace controller to manager")
 		os.Exit(1)
 	}
 

@@ -40,14 +40,14 @@ type SharedInformation interface {
 	// WorkspacePermissionsForRole returns the permissions that users with the given role should have in a workspace namespace.
 	WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error)
 
-	// OnboardingClusterForProjectController returns access to the onboarding cluster.
-	// The returned cluster can be expected to have 'get' permissions for all resources returned by ResourcesBlockingProjectDeletion.
-	// Note that the corresponding resources are not part of the client's scheme and therefore can only be retrieved as unstructured objects.
-	OnboardingClusterForProjectController(ctx context.Context) (*clusters.Cluster, error)
-	// OnboardingClusterForWorkspaceController returns access to the onboarding cluster.
-	// The returned cluster can be expected to have 'get' permissions for all resources returned by ResourcesBlockingWorkspaceDeletion.
-	// Note that the corresponding resources are not part of the client's scheme and therefore can only be retrieved as unstructured objects.
-	OnboardingClusterForWorkspaceController(ctx context.Context) (*clusters.Cluster, error)
+	// OnboardingClusterStatic returns the static access to the onboarding cluster.
+	// It has permissions for namespaces, rbac resources, CRDs, and Project/Workspace resources.
+	// For listing resources that potentially block deletion of projects or workspaces, the dynamic client needs to be used.
+	OnboardingClusterStatic(ctx context.Context) (*clusters.Cluster, error)
+	// OnboardingClusterDynamic returns the dynamic access to the onboarding cluster.
+	// It is regularly updated to include get permissions for all resources that might block deletion of projects or workspaces.
+	// For interacting with any other resource, the static client needs to be used.
+	OnboardingClusterDynamic(ctx context.Context) (*clusters.Cluster, error)
 }
 
 const (

@@ -16,6 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/openmcp-project/controller-utils/pkg/clusters"
+
 	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
@@ -26,9 +28,24 @@ var (
 
 // WorkspaceReconciler reconciles a Workspace object
 type WorkspaceReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-	CommonReconciler
+	OnboardingStatic *clusters.Cluster
+	Scheme           *runtime.Scheme
+	*CommonReconciler
+}
+
+func NewWorkspaceReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*WorkspaceReconciler, error) {
+	wr := &WorkspaceReconciler{
+		Scheme:           scheme,
+		CommonReconciler: cr,
+	}
+
+	onboardingClusterStatic, err := cr.Config.OnboardingClusterStatic(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	wr.OnboardingStatic = onboardingClusterStatic
+
+	return wr, nil
 }
 
 // +kubebuilder:rbac:groups=core.openmcp.cloud,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
@@ -41,7 +58,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log := log.FromContext(ctx)
 
 	workspace := &v1alpha1.Workspace{}
-	if err := r.Get(ctx, req.NamespacedName, workspace); err != nil {
+	if err := r.OnboardingStatic.Client().Get(ctx, req.NamespacedName, workspace); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Workspace not found")
 			return ctrl.Result{}, nil
@@ -69,7 +86,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	if hasRemainingContent {
-		if err := r.Status().Update(ctx, workspace); err != nil {
+		if err := r.OnboardingStatic.Client().Status().Update(ctx, workspace); err != nil {
 			log.Error(err, "failed to update status")
 		}
 
@@ -79,7 +96,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	deleted, dresult, err := r.handleDelete(ctx, workspace, func() error {
-		if err := r.Delete(ctx, workspaceNamespace); err != nil {
+		if err := r.OnboardingStatic.Client().Delete(ctx, workspaceNamespace); err != nil {
 			return client.IgnoreNotFound(err)
 		}
 		if err := r.deleteClusterRole(ctx, project, workspace); err != nil {
@@ -98,7 +115,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Always update status
 	defer func() {
-		if err := r.Status().Update(ctx, workspace); err != nil {
+		if err := r.OnboardingStatic.Client().Status().Update(ctx, workspace); err != nil {
 			log.Error(err, "failed to update status")
 		}
 	}()
@@ -107,7 +124,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Namespace Creation
 	//
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, workspaceNamespace, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), workspaceNamespace, func() error {
 		setWorkspaceLabel(workspaceNamespace, workspace.Name)
 		setProjectLabel(workspaceNamespace, project.Name)
 		r.applyManagementLabel(workspaceNamespace)
@@ -139,7 +156,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespaceName string) (*v1alpha1.Project, error) {
 	namespace := &corev1.Namespace{}
-	if err := r.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err != nil {
+	if err := r.OnboardingStatic.Client().Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +170,7 @@ func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespa
 	}
 
 	project := &v1alpha1.Project{}
-	if err := r.Get(ctx, types.NamespacedName{Name: projectName}, project); err != nil {
+	if err := r.OnboardingStatic.Client().Get(ctx, types.NamespacedName{Name: projectName}, project); err != nil {
 		return nil, err
 	}
 
@@ -169,7 +186,7 @@ func (r *WorkspaceReconciler) createOrUpdateRoleBinding(ctx context.Context, wor
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, roleBinding, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), roleBinding, func() error {
 		r.applyManagementLabel(roleBinding)
 
 		roleBinding.RoleRef = rbacv1.RoleRef{
@@ -201,7 +218,7 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 			},
 		}
 
-		result, err := controllerutil.CreateOrUpdate(ctx, r.Client, clusterRole, func() error {
+		result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), clusterRole, func() error {
 			r.applyManagementLabel(clusterRole)
 
 			clusterRole.Rules = []rbacv1.PolicyRule{
@@ -226,7 +243,7 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 			},
 		}
 
-		result, err = controllerutil.CreateOrUpdate(ctx, r.Client, clusterRoleBinding, func() error {
+		result, err = controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), clusterRoleBinding, func() error {
 			r.applyManagementLabel(clusterRoleBinding)
 
 			clusterRoleBinding.Subjects = getSubjectsForWorkspaceRole(ws, role)
@@ -264,7 +281,7 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1
 			},
 		}
 
-		if err := r.Delete(ctx, clusterRole); err != nil {
+		if err := r.OnboardingStatic.Client().Delete(ctx, clusterRole); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
@@ -277,7 +294,7 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1
 			},
 		}
 
-		if err := r.Delete(ctx, clusterRoleBinding); err != nil {
+		if err := r.OnboardingStatic.Client().Delete(ctx, clusterRoleBinding); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return err
 			}

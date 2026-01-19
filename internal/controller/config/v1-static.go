@@ -16,16 +16,11 @@ import (
 	"github.com/openmcp-project/project-workspace-operator/api/install"
 )
 
-// V1Config is a global variable containing the v1 implementation of SharedInformation.
-// It can only be used after having been initialized via InitializeV1Config.
-var V1Config *v1Config
-
-// InitializeV1Config initializes the V1Config variable.
-func InitializeV1Config(platformCluster *clusters.Cluster, onboardingClusterConfig *rest.Config, cfg *pwov1alpha1.ProjectWorkspaceConfig) error {
-	res := &v1Config{}
-	res.onboardingCluster = clusters.New(clusterIDOnboardingInternal).WithRESTConfig(onboardingClusterConfig)
+func NewV1Config(onboardingClusterConfig *rest.Config, cfg *pwov1alpha1.ProjectWorkspaceConfig) (*V1Config, error) {
+	res := &V1Config{}
+	res.onboardingCluster = clusters.New("onboarding").WithRESTConfig(onboardingClusterConfig)
 	if err := res.onboardingCluster.InitializeClient(install.InstallOperatorAPIsOnboarding(runtime.NewScheme())); err != nil {
-		return fmt.Errorf("error initializing client for onboarding cluster: %w", err)
+		return nil, fmt.Errorf("error initializing client for onboarding cluster: %w", err)
 	}
 	res.resourcesBlockingProjectDeletion = collections.ProjectSliceToSlice(cfg.Spec.Project.ResourcesBlockingDeletion, func(gvk metav1.GroupVersionKind) DeletionBlockingResource {
 		return DeletionBlockingResource{
@@ -59,7 +54,7 @@ func InitializeV1Config(platformCluster *clusters.Cluster, onboardingClusterConf
 	for role, permissions := range cfg.Spec.Project.AdditionalPermissions {
 		roleID := ProjectMemberRoleToRoleID(role)
 		if roleID == "" {
-			return fmt.Errorf("unable to map project role '%s' to role id", string(role))
+			return nil, fmt.Errorf("unable to map project role '%s' to role id", string(role))
 		}
 		res.projectPermissionsByRole[roleID] = permissions
 	}
@@ -67,15 +62,14 @@ func InitializeV1Config(platformCluster *clusters.Cluster, onboardingClusterConf
 	for role, permissions := range cfg.Spec.Workspace.AdditionalPermissions {
 		roleID := WorkspaceMemberRoleToRoleID(role)
 		if roleID == "" {
-			return fmt.Errorf("unable to map workspace role '%s' to role id", string(role))
+			return nil, fmt.Errorf("unable to map workspace role '%s' to role id", string(role))
 		}
 		res.workspacePermissionsByRole[roleID] = permissions
 	}
-	V1Config = res
-	return nil
+	return res, nil
 }
 
-type v1Config struct {
+type V1Config struct {
 	onboardingCluster                  *clusters.Cluster
 	resourcesBlockingProjectDeletion   []DeletionBlockingResource
 	resourcesBlockingWorkspaceDeletion []DeletionBlockingResource
@@ -83,34 +77,36 @@ type v1Config struct {
 	workspacePermissionsByRole         map[string][]rbacv1.PolicyRule
 }
 
-var _ SharedInformation = &v1Config{}
+var _ SharedInformation = &V1Config{}
 
-// OnboardingClusterForProjectController implements SharedInformation.
-func (v *v1Config) OnboardingClusterForProjectController(ctx context.Context) (*clusters.Cluster, error) {
-	panic("unimplemented")
+func (v *V1Config) OnboardingClusterStatic(ctx context.Context) (*clusters.Cluster, error) {
+	return v.onboardingCluster, nil
 }
 
-// OnboardingClusterForWorkspaceController implements SharedInformation.
-func (v *v1Config) OnboardingClusterForWorkspaceController(ctx context.Context) (*clusters.Cluster, error) {
-	panic("unimplemented")
+func (v *V1Config) OnboardingClusterDynamic(ctx context.Context) (*clusters.Cluster, error) {
+	return v.onboardingCluster, nil
 }
 
 // ResourcesBlockingProjectDeletion implements SharedInformation.
-func (v *v1Config) ResourcesBlockingProjectDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
-	panic("unimplemented")
+func (v *V1Config) ResourcesBlockingProjectDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
+	return v.resourcesBlockingProjectDeletion, nil
 }
 
 // ResourcesBlockingWorkspaceDeletion implements SharedInformation.
-func (v *v1Config) ResourcesBlockingWorkspaceDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
-	panic("unimplemented")
+func (v *V1Config) ResourcesBlockingWorkspaceDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
+	return v.resourcesBlockingWorkspaceDeletion, nil
 }
 
 // ProjectPermissionsForRole implements SharedInformation.
-func (v *v1Config) ProjectPermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
-	panic("unimplemented")
+func (v *V1Config) ProjectPermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
+	permissions, exists := v.projectPermissionsByRole[roleID]
+	if !exists {
+		return nil, fmt.Errorf("unknown role ID")
+	}
+	return permissions, nil
 }
 
 // WorkspacePermissionsForRole implements SharedInformation.
-func (v *v1Config) WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
+func (v *V1Config) WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
 	panic("unimplemented")
 }
