@@ -20,6 +20,13 @@ type DeletionBlockingResource struct {
 	Source string
 }
 
+func (dbr *DeletionBlockingResource) DeepCopy() *DeletionBlockingResource {
+	return &DeletionBlockingResource{
+		GroupVersionKind: *dbr.GroupVersionKind.DeepCopy(),
+		Source:           dbr.Source,
+	}
+}
+
 // SharedInformation holds information that is required by multiple controllers.
 // There should be one instance which every controller can access.
 // The implementation has to be thread-safe.
