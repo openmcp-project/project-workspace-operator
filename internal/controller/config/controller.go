@@ -7,12 +7,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/collections"
+	"github.com/openmcp-project/controller-utils/pkg/collections/filters"
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -86,6 +87,7 @@ type PWOConfigController struct {
 	Car                           advanced.ClusterAccessReconciler
 	rec                           record.EventRecorder
 	OnboardingClusterAccessStatic *clusters.Cluster
+	DiscoveryService              discovery.DiscoveryInterface
 
 	// The lock needs to be held when reading or writing any of the fields below.
 	lock                               *sync.RWMutex
@@ -117,7 +119,13 @@ func (l APIGroupsWithResourcesList) Append(elems ...APIGroupsWithResources) APIG
 			b := sets.New(elem.APIGroups...)
 			if a.Equal(b) {
 				found = true
-				existing.Resources = append(existing.Resources, elem.Resources...)
+				uniqueness := sets.New(existing.Resources...)
+				for _, res := range elem.Resources {
+					if !uniqueness.Has(res) {
+						existing.Resources = append(existing.Resources, res)
+						uniqueness.Insert(res)
+					}
+				}
 				l[i] = existing
 				break
 			}
@@ -138,13 +146,22 @@ func (l APIGroupsWithResourcesList) Append(elems ...APIGroupsWithResources) APIG
 // - It reconciles the OnboardingCluster AccessRequests for the project and workspace controllers to ensure they can always fetch the the resources that are supposed to block deletion.
 //
 // Note that this is a pure v2 controller. It does neither work for v1, nor is it required, because in v1 all of this information is statically read from a file.
-func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder) *PWOConfigController {
+func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder) (*PWOConfigController, error) {
 	scheme := install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 	obRef := advanced.StaticReferenceGenerator(onboardingClusterRef)
+	var ds discovery.DiscoveryInterface
+	if onboardingClusterStatic != nil && onboardingClusterStatic.RESTConfig() != nil {
+		var err error
+		ds, err = discovery.NewDiscoveryClientForConfig(onboardingClusterStatic.RESTConfig())
+		if err != nil {
+			return nil, fmt.Errorf("error creating discovery client for onboarding cluster: %v", err)
+		}
+	}
 	return &PWOConfigController{
 		providerName:                  providerName,
 		platformCluster:               platformCluster,
 		OnboardingClusterAccessStatic: onboardingClusterStatic,
+		DiscoveryService:              ds,
 		Car: advanced.NewClusterAccessReconciler(platformCluster.Client(), ControllerName).
 			Register(advanced.ExistingCluster(ClusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).Build()),
 		rec:                                rec,
@@ -153,7 +170,32 @@ func NewPWOConfigController(providerName string, platformCluster *clusters.Clust
 		resourcesBlockingWorkspaceDeletion: []DeletionBlockingResource{},
 		permissibleProjectResources:        []APIGroupsWithResources{},
 		permissibleWorkspaceResources:      []APIGroupsWithResources{},
+	}, nil
+}
+
+// discoverResourceNameForGVK tries to discover the resource name for the given GroupVersionKind using the discovery client.
+func (c *PWOConfigController) discoverResourceNameForGVK(gvk metav1.GroupVersionKind) (string, error) {
+	if c.DiscoveryService == nil {
+		return "", fmt.Errorf("no discovery client set")
 	}
+	gvMatches, err := c.DiscoveryService.ServerResourcesForGroupVersion(fmt.Sprintf("%s/%s", gvk.Group, gvk.Version))
+	if err != nil {
+		return "", fmt.Errorf("failed to discover resource names for apiVersion '%s/%s': %w", gvk.Group, gvk.Version, err)
+	}
+	resMatches := filters.FilterSlice(gvMatches.APIResources, func(args ...any) bool {
+		if len(args) != 1 {
+			return false
+		}
+		apir, ok := args[0].(metav1.APIResource)
+		if !ok {
+			return false
+		}
+		return apir.Kind == gvk.Kind
+	})
+	if len(resMatches) != 1 {
+		return "", fmt.Errorf("unable to unambiguously determine resource name for kind '%s' with apiVersion '%s/%s': found %d potential matches", gvk.Kind, gvk.Group, gvk.Version, len(resMatches))
+	}
+	return resMatches[0].Name, nil
 }
 
 func (c *PWOConfigController) SetupWithManager(mgr ctrl.Manager) error {
@@ -274,24 +316,6 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 		return cfg, reconcile.Result{}, fmt.Errorf("failed to list ServiceProviders: %w", err)
 	}
 	log.Debug("Fetched ServiceProviders", "count", len(sps.Items))
-	// fetch CRDs from onboarding cluster
-	// this is required because we only have the kind, but need the plural form resource name for RBAC
-	log.Debug("Fetching CRDs from the onboarding cluster")
-	crds := &apiextv1.CustomResourceDefinitionList{}
-	if err := c.OnboardingClusterAccessStatic.Client().List(ctx, crds); err != nil {
-		return cfg, reconcile.Result{}, fmt.Errorf("failed to list CRDs from onboarding cluster: %w", err)
-	}
-	pluralNames := map[metav1.GroupVersionKind]string{}
-	for _, crd := range crds.Items {
-		for _, ver := range crd.Spec.Versions {
-			gvk := metav1.GroupVersionKind{
-				Group:   crd.Spec.Group,
-				Version: ver.Name,
-				Kind:    crd.Spec.Names.Kind,
-			}
-			pluralNames[gvk] = crd.Spec.Names.Plural
-		}
-	}
 	for _, sp := range sps.Items {
 		for _, gvk := range sp.Status.Resources {
 			// add resource to list of resources blocking workspace deletion
@@ -301,13 +325,13 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 				Source:           fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, sp.Name),
 			})
 			// add resource to permissible resources
-			pluralName, ok := pluralNames[gvk]
-			if !ok {
-				return cfg, reconcile.Result{}, fmt.Errorf("unable to find CRD for kind '%s' with apiVersion '%s/%s' registered by ServiceProvider '%s'", gvk.Kind, gvk.Group, gvk.Version, sp.Name)
+			resourceName, err := c.discoverResourceNameForGVK(gvk)
+			if err != nil {
+				return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s', registered by ServiceProvider '%s: %w", gvk.Kind, gvk.Group, gvk.Version, sp.Name, err)
 			}
 			agr := APIGroupsWithResources{
 				APIGroups: []string{gvk.Group},
-				Resources: []string{pluralName},
+				Resources: []string{resourceName},
 			}
 			// if we allow MCPs on project level, we need the following line
 			// newPermissibleProjectResources = newPermissibleProjectResources.Append(agr)
@@ -326,37 +350,39 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 
 	// update the AccessRequests for the onboarding cluster to ensure that the project and workspace controllers have sufficient permissions to get the resources blocking deletion
 	log.Info("Updating AccessRequests to ensure project and workspace controllers have sufficient permissions to get deletion blocking resources")
-	permissions := []clustersv1alpha1.PermissionsRequest{}
+	permissionGroups := APIGroupsWithResourcesList{}
 	for _, res := range c.resourcesBlockingProjectDeletion {
-		pluralName, ok := pluralNames[res.GroupVersionKind]
-		if !ok {
-			return cfg, reconcile.Result{}, fmt.Errorf("unable to find CRD for kind '%s' with apiVersion '%s/%s'", res.Kind, res.Group, res.Version)
+		resourceName, err := c.discoverResourceNameForGVK(res.GroupVersionKind)
+		if err != nil {
+			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)
 		}
-		permissions = append(permissions, clustersv1alpha1.PermissionsRequest{
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{res.Group},
-					Resources: []string{pluralName, fmt.Sprintf("%s/status", pluralName)},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-			},
+		permissionGroups = permissionGroups.Append(APIGroupsWithResources{
+			APIGroups: []string{res.Group},
+			Resources: []string{resourceName, fmt.Sprintf("%s/status", resourceName)},
 		})
+
 	}
 	for _, res := range c.resourcesBlockingWorkspaceDeletion {
-		pluralName, ok := pluralNames[res.GroupVersionKind]
-		if !ok {
-			return cfg, reconcile.Result{}, fmt.Errorf("unable to find CRD for kind '%s' with apiVersion '%s/%s'", res.Kind, res.Group, res.Version)
+		resourceName, err := c.discoverResourceNameForGVK(res.GroupVersionKind)
+		if err != nil {
+			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)
 		}
-		permissions = append(permissions, clustersv1alpha1.PermissionsRequest{
+		permissionGroups = permissionGroups.Append(APIGroupsWithResources{
+			APIGroups: []string{res.Group},
+			Resources: []string{resourceName, fmt.Sprintf("%s/status", resourceName)},
+		})
+	}
+	permissions := collections.ProjectSliceToSlice(permissionGroups, func(elem APIGroupsWithResources) clustersv1alpha1.PermissionsRequest {
+		return clustersv1alpha1.PermissionsRequest{
 			Rules: []rbacv1.PolicyRule{
 				{
-					APIGroups: []string{res.Group},
-					Resources: []string{pluralName, fmt.Sprintf("%s/status", pluralName)},
+					APIGroups: elem.APIGroups,
+					Resources: elem.Resources,
 					Verbs:     []string{"get", "list", "watch"},
 				},
 			},
-		})
-	}
+		}
+	})
 	if err := c.Car.Update(ClusterIDOnboardingDynamic, advanced.UpdateTokenAccess(&clustersv1alpha1.TokenConfig{Permissions: permissions})); err != nil {
 		return cfg, reconcile.Result{}, fmt.Errorf("failed to update AccessRequest for onboarding cluster: %w", err)
 	}

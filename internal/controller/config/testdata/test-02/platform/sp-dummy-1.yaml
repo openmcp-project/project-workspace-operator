@@ -1,0 +1,13 @@
+apiVersion: openmcp.cloud/v1alpha1
+kind: ServiceProvider
+metadata:
+  name: dummy-1
+spec:
+  image: dummy
+status:
+  observedGeneration: 1
+  phase: Ready
+  resources:
+  - group: ""
+    kind: ConfigMap
+    version: v1

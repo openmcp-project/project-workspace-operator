@@ -238,11 +238,6 @@ func (o *RunOptions) Run(ctx context.Context) error {
 					Verbs:     []string{"*"},
 				},
 				{
-					APIGroups: []string{"apiextensions.k8s.io"},
-					Resources: []string{"customresourcedefinitions"},
-					Verbs:     []string{"list", "get"},
-				},
-				{
 					APIGroups: []string{""},
 					Resources: []string{"namespaces"},
 					Verbs:     []string{"*"},
@@ -325,9 +320,12 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to get cluster request for onboarding cluster: %w", err)
 	}
 
-	cfgCtrl := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil)
-	if err := cfgCtrl.SetupWithManager(mgr); err != nil {
+	cfgCtrl, err := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil)
+	if err != nil {
 		return fmt.Errorf("unable to create ProjectWorkspaceConfig controller: %w", err)
+	}
+	if err := cfgCtrl.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to add ProjectWorkspaceConfig controller to manager: %w", err)
 	}
 
 	commonReconciler := &core.CommonReconciler{
