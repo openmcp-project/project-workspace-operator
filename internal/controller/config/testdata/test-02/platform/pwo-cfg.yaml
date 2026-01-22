@@ -1,5 +1,5 @@
 apiVersion: core.openmcp.cloud/v1alpha1
 kind: ProjectWorkspaceConfig
 metadata:
-  name: project-workspace-operator
+  name: project-workspace
 spec: {}

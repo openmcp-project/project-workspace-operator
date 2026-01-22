@@ -146,7 +146,7 @@ func (l APIGroupsWithResourcesList) Append(elems ...APIGroupsWithResources) APIG
 // - It reconciles the OnboardingCluster AccessRequests for the project and workspace controllers to ensure they can always fetch the the resources that are supposed to block deletion.
 //
 // Note that this is a pure v2 controller. It does neither work for v1, nor is it required, because in v1 all of this information is statically read from a file.
-func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder) (*PWOConfigController, error) {
+func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder, podNamespace string) (*PWOConfigController, error) {
 	scheme := install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 	obRef := advanced.StaticReferenceGenerator(onboardingClusterRef)
 	var ds discovery.DiscoveryInterface
@@ -163,7 +163,7 @@ func NewPWOConfigController(providerName string, platformCluster *clusters.Clust
 		OnboardingClusterAccessStatic: onboardingClusterStatic,
 		DiscoveryService:              ds,
 		Car: advanced.NewClusterAccessReconciler(platformCluster.Client(), ControllerName).
-			Register(advanced.ExistingCluster(ClusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).Build()),
+			Register(advanced.ExistingCluster(ClusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).WithNamespaceGenerator(func(_ reconcile.Request, _ ...any) (string, error) { return podNamespace, nil }).Build()),
 		rec:                                rec,
 		lock:                               &sync.RWMutex{},
 		resourcesBlockingProjectDeletion:   []DeletionBlockingResource{},

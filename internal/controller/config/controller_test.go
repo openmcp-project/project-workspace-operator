@@ -36,7 +36,8 @@ const (
 	onboardingClusterID = "onboarding"
 
 	pwcRec       = "projectworkspaceconfig-controller"
-	providerName = "project-workspace-operator"
+	providerName = "project-workspace"
+	podNamespace = "openmcp-system"
 )
 
 var onboardingScheme = install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
@@ -79,7 +80,7 @@ func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResour
 		}).
 		WithDynamicObjectsWithStatus(platformClusterID, &clustersv1alpha1.AccessRequest{}).
 		WithReconcilerConstructor(pwcRec, func(c ...client.Client) reconcile.Reconciler {
-			pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil)
+			pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace)
 			Expect(err).ToNot(HaveOccurred(), "failed to create PWOConfigController")
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestReadiness, advanced.FakeAccessRequestReadiness())
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestDeletion, advanced.FakeAccessRequestDeletion([]string{"clusterprovider"}, nil))
@@ -146,6 +147,7 @@ func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc 
 
 	ar, err := pwc.Car.AccessRequest(env.Ctx, req, sharedconfig.ClusterIDOnboardingDynamic)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+	ExpectWithOffset(1, ar.Namespace).To(Equal(podNamespace))
 	ExpectWithOffset(1, ar.Spec.Token).To(Equal(expected.dynamicAccessPermissions), "dynamic access permissions do not match")
 }
 

@@ -205,6 +205,13 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	setupLog.Info("Environment", "value", o.Environment)
 	setupLog.Info("ProviderName", "value", o.ProviderName)
 
+	setupLog.Info("Determining pod namespace")
+	podNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
+	if podNamespace == "" {
+		return fmt.Errorf("unable to determine pod namespace, env var '%s' must be set", openmcpconst.EnvVariablePodNamespace)
+	}
+	setupLog.Info("Pod Namespace", "value", podNamespace)
+
 	setupLog.Info("Fetching ProjectWorkspaceConfig")
 	pwc := &pwv1alpha1.ProjectWorkspaceConfig{}
 	if err := o.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: o.ProviderName}, pwc); err != nil {
@@ -320,7 +327,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to get cluster request for onboarding cluster: %w", err)
 	}
 
-	cfgCtrl, err := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil)
+	cfgCtrl, err := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil, podNamespace)
 	if err != nil {
 		return fmt.Errorf("unable to create ProjectWorkspaceConfig controller: %w", err)
 	}
