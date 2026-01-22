@@ -333,10 +333,6 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		Config:         cfgCtrl,
 	}
 
-	if err := cfgCtrl.SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("unable to add ProjectWorkspaceConfig controller to manager: %w", err)
-	}
-
 	pr, err := core.NewProjectReconciler(mgr.GetScheme(), commonReconciler)
 	if err != nil {
 		return fmt.Errorf("unable to create Project reconciler: %w", err)
