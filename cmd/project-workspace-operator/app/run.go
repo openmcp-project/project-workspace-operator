@@ -223,8 +223,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	}
 
 	setupLog.Info("Getting access to the onboarding cluster")
-	onboardingScheme := runtime.NewScheme()
-	providerscheme.InstallOperatorAPIsOnboarding(onboardingScheme)
+	onboardingScheme := providerscheme.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 
 	providerSystemNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
 	if providerSystemNamespace == "" {

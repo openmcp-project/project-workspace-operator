@@ -223,7 +223,7 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 
 	It("should correctly handle empty config with ServiceProviders", func() {
 		pwc, env := defaultTestSetup(filepath.Join("testdata", "test-02"), &metav1.APIResourceList{
-			GroupVersion: "/v1",
+			GroupVersion: "v1",
 			APIResources: []metav1.APIResource{
 				{
 					Name:       "secrets",
@@ -450,7 +450,7 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 				},
 			},
 		}, &metav1.APIResourceList{
-			GroupVersion: "/v1",
+			GroupVersion: "v1",
 			APIResources: []metav1.APIResource{
 				{
 					Name:       "secrets",

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -174,11 +175,12 @@ func NewPWOConfigController(providerName string, platformCluster *clusters.Clust
 }
 
 // discoverResourceNameForGVK tries to discover the resource name for the given GroupVersionKind using the discovery client.
-func (c *PWOConfigController) discoverResourceNameForGVK(gvk metav1.GroupVersionKind) (string, error) {
+func (c *PWOConfigController) discoverResourceNameForGVK(log logging.Logger, gvk metav1.GroupVersionKind) (string, error) {
 	if c.DiscoveryService == nil {
 		return "", fmt.Errorf("no discovery client set")
 	}
-	gvMatches, err := c.DiscoveryService.ServerResourcesForGroupVersion(fmt.Sprintf("%s/%s", gvk.Group, gvk.Version))
+	log.Debug("Discovering resource name", "group", gvk.Group, "version", gvk.Version, "kind", gvk.Kind)
+	gvMatches, err := c.DiscoveryService.ServerResourcesForGroupVersion(strings.TrimPrefix(fmt.Sprintf("%s/%s", gvk.Group, gvk.Version), "/"))
 	if err != nil {
 		return "", fmt.Errorf("failed to discover resource names for apiVersion '%s/%s': %w", gvk.Group, gvk.Version, err)
 	}
@@ -195,6 +197,7 @@ func (c *PWOConfigController) discoverResourceNameForGVK(gvk metav1.GroupVersion
 	if len(resMatches) != 1 {
 		return "", fmt.Errorf("unable to unambiguously determine resource name for kind '%s' with apiVersion '%s/%s': found %d potential matches", gvk.Kind, gvk.Group, gvk.Version, len(resMatches))
 	}
+	log.Debug("Successfully discovered resource name", "group", gvk.Group, "version", gvk.Version, "kind", gvk.Kind, "resourceName", resMatches[0].Name)
 	return resMatches[0].Name, nil
 }
 
@@ -325,7 +328,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 				Source:           fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, sp.Name),
 			})
 			// add resource to permissible resources
-			resourceName, err := c.discoverResourceNameForGVK(gvk)
+			resourceName, err := c.discoverResourceNameForGVK(log, gvk)
 			if err != nil {
 				return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s', registered by ServiceProvider '%s: %w", gvk.Kind, gvk.Group, gvk.Version, sp.Name, err)
 			}
@@ -352,7 +355,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	log.Info("Updating AccessRequests to ensure project and workspace controllers have sufficient permissions to get deletion blocking resources")
 	permissionGroups := APIGroupsWithResourcesList{}
 	for _, res := range c.resourcesBlockingProjectDeletion {
-		resourceName, err := c.discoverResourceNameForGVK(res.GroupVersionKind)
+		resourceName, err := c.discoverResourceNameForGVK(log, res.GroupVersionKind)
 		if err != nil {
 			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)
 		}
@@ -363,7 +366,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 
 	}
 	for _, res := range c.resourcesBlockingWorkspaceDeletion {
-		resourceName, err := c.discoverResourceNameForGVK(res.GroupVersionKind)
+		resourceName, err := c.discoverResourceNameForGVK(log, res.GroupVersionKind)
 		if err != nil {
 			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)
 		}
