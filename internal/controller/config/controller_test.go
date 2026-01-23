@@ -314,6 +314,13 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 					Kind:       "MyProjectBlockingResource",
 					Namespaced: true,
 				},
+				{
+					Name:       "myprojectblockingresources/status",
+					Group:      "mygroup.project",
+					Version:    "v1",
+					Kind:       "MyProjectBlockingResource",
+					Namespaced: true,
+				},
 			},
 		}, &metav1.APIResourceList{
 			GroupVersion: "mygroup.workspace/v1alpha1",
@@ -326,7 +333,21 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 					Namespaced: true,
 				},
 				{
+					Name:       "myworkspaceblockingresources1/status",
+					Group:      "mygroup.workspace",
+					Version:    "v1alpha1",
+					Kind:       "MyWorkspaceBlockingResource1",
+					Namespaced: true,
+				},
+				{
 					Name:       "myworkspaceblockingresources2",
+					Group:      "mygroup.workspace",
+					Version:    "v1alpha1",
+					Kind:       "MyWorkspaceBlockingResource2",
+					Namespaced: true,
+				},
+				{
+					Name:       "myworkspaceblockingresources2/status",
 					Group:      "mygroup.workspace",
 					Version:    "v1alpha1",
 					Kind:       "MyWorkspaceBlockingResource2",
@@ -430,6 +451,13 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 					Kind:       "MyProjectBlockingResource",
 					Namespaced: true,
 				},
+				{
+					Name:       "myprojectblockingresources/status",
+					Group:      "mygroup.project",
+					Version:    "v1",
+					Kind:       "MyProjectBlockingResource",
+					Namespaced: true,
+				},
 			},
 		}, &metav1.APIResourceList{
 			GroupVersion: "mygroup.workspace/v1alpha1",
@@ -442,7 +470,21 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 					Namespaced: true,
 				},
 				{
+					Name:       "myworkspaceblockingresources1/status",
+					Group:      "mygroup.workspace",
+					Version:    "v1alpha1",
+					Kind:       "MyWorkspaceBlockingResource1",
+					Namespaced: true,
+				},
+				{
 					Name:       "myworkspaceblockingresources2",
+					Group:      "mygroup.workspace",
+					Version:    "v1alpha1",
+					Kind:       "MyWorkspaceBlockingResource2",
+					Namespaced: true,
+				},
+				{
+					Name:       "myworkspaceblockingresources2/status",
 					Group:      "mygroup.workspace",
 					Version:    "v1alpha1",
 					Kind:       "MyWorkspaceBlockingResource2",

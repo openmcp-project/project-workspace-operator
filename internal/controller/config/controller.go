@@ -192,10 +192,14 @@ func (c *PWOConfigController) discoverResourceNameForGVK(log logging.Logger, gvk
 		if !ok {
 			return false
 		}
-		return apir.Kind == gvk.Kind
+		if apir.Kind != gvk.Kind {
+			return false
+		}
+		// this will also return subresources, like 'myresources/status', so let's filter out anything with a '/' in the name
+		return !strings.Contains(apir.Name, "/")
 	})
 	if len(resMatches) != 1 {
-		return "", fmt.Errorf("unable to unambiguously determine resource name for kind '%s' with apiVersion '%s/%s': found %d potential matches", gvk.Kind, gvk.Group, gvk.Version, len(resMatches))
+		return "", fmt.Errorf("unable to unambiguously determine resource name for kind '%s' with apiVersion '%s/%s': found %d potential matches: [%s]", gvk.Kind, gvk.Group, gvk.Version, len(resMatches), strings.Join(collections.ProjectSliceToSlice(resMatches, func(res metav1.APIResource) string { return res.Name }), ", "))
 	}
 	log.Debug("Successfully discovered resource name", "group", gvk.Group, "version", gvk.Version, "kind", gvk.Kind, "resourceName", resMatches[0].Name)
 	return resMatches[0].Name, nil
