@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -410,6 +411,52 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	c.onboardingClusterAccessDynamic = access
 
 	log.Info("Successfully reloaded configuration")
+	if log.Enabled(logging.DEBUG) {
+		// if logging on debug level is enabled, log the current configuration for easier debugging
+		for k, v := range map[string][]DeletionBlockingResource{
+			"project":   c.resourcesBlockingProjectDeletionInternal(),
+			"workspace": c.resourcesBlockingWorkspaceDeletionInternal(),
+		} {
+			dbrBytes, err := json.Marshal(v)
+			if err != nil {
+				log.Error(err, fmt.Sprintf("unable to marshal resources blocking %s deletion into json", k))
+			} else {
+				log.Debug(fmt.Sprintf("Resources blocking %s deletion", k), "resources", string(dbrBytes))
+			}
+		}
+		projectPermissions := map[string][]rbacv1.PolicyRule{}
+		for _, roleID := range []string{AdminRole, ViewerRole} {
+			perms, err := c.projectPermissionsForRoleInternal(roleID)
+			if err != nil {
+				log.Error(err, "error determining project permissions", "roleID", roleID)
+				continue
+			}
+			projectPermissions[roleID] = perms
+		}
+		workspacePermissions := map[string][]rbacv1.PolicyRule{}
+		for _, roleID := range []string{AdminRole, ViewerRole} {
+			perms, err := c.workspacePermissionsForRoleInternal(roleID)
+			if err != nil {
+				log.Error(err, "error determining workspace permissions", "roleID", roleID)
+				continue
+			}
+			workspacePermissions[roleID] = perms
+		}
+		for k, v := range map[string]map[string][]rbacv1.PolicyRule{
+			"Project":   projectPermissions,
+			"Workspace": workspacePermissions,
+		} {
+			for roleID, perms := range v {
+				permBytes, err := json.Marshal(perms)
+				if err != nil {
+					log.Error(err, fmt.Sprintf("unable to marshal %s permissions for %s role into json", strings.ToLower(k), roleID))
+				} else {
+					log.Debug(fmt.Sprintf("%s permissions for role '%s'", k, roleID), "permissions", string(permBytes))
+				}
+			}
+		}
+	}
+
 	return cfg, reconcile.Result{}, nil
 }
 
@@ -423,10 +470,13 @@ func (c *PWOConfigController) ResourcesBlockingProjectDeletion(ctx context.Conte
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
+	return c.resourcesBlockingProjectDeletionInternal(), nil
+}
+func (c *PWOConfigController) resourcesBlockingProjectDeletionInternal() []DeletionBlockingResource {
 	res := make([]DeletionBlockingResource, len(c.resourcesBlockingProjectDeletion)+len(BuiltinResourcesBlockingProjectDeletion))
 	copy(res, BuiltinResourcesBlockingProjectDeletion)
 	copy(res[len(BuiltinResourcesBlockingProjectDeletion):], c.resourcesBlockingProjectDeletion)
-	return res, nil
+	return res
 }
 
 func (c *PWOConfigController) ResourcesBlockingWorkspaceDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
@@ -435,10 +485,13 @@ func (c *PWOConfigController) ResourcesBlockingWorkspaceDeletion(ctx context.Con
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
+	return c.resourcesBlockingWorkspaceDeletionInternal(), nil
+}
+func (c *PWOConfigController) resourcesBlockingWorkspaceDeletionInternal() []DeletionBlockingResource {
 	res := make([]DeletionBlockingResource, len(c.resourcesBlockingWorkspaceDeletion)+len(BuiltinResourcesBlockingWorkspaceDeletion))
 	copy(res, BuiltinResourcesBlockingWorkspaceDeletion)
 	copy(res[len(BuiltinResourcesBlockingWorkspaceDeletion):], c.resourcesBlockingWorkspaceDeletion)
-	return res, nil
+	return res
 }
 
 func (c *PWOConfigController) ProjectPermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
@@ -447,6 +500,9 @@ func (c *PWOConfigController) ProjectPermissionsForRole(ctx context.Context, rol
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
+	return c.projectPermissionsForRoleInternal(roleID)
+}
+func (c *PWOConfigController) projectPermissionsForRoleInternal(roleID string) ([]rbacv1.PolicyRule, error) {
 	permissibleProjectResources := append([]APIGroupsWithResources{}, BuiltinPermissibleProjectResources...)
 	permissibleProjectResources = append(permissibleProjectResources, c.permissibleProjectResources...)
 	res := []rbacv1.PolicyRule{}
@@ -465,6 +521,9 @@ func (c *PWOConfigController) WorkspacePermissionsForRole(ctx context.Context, r
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
+	return c.workspacePermissionsForRoleInternal(roleID)
+}
+func (c *PWOConfigController) workspacePermissionsForRoleInternal(roleID string) ([]rbacv1.PolicyRule, error) {
 	permissibleWorkspaceResources := append([]APIGroupsWithResources{}, BuiltinPermissibleWorkspaceResources...)
 	permissibleWorkspaceResources = append(permissibleWorkspaceResources, c.permissibleWorkspaceResources...)
 	res := []rbacv1.PolicyRule{}

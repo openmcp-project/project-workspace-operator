@@ -15,9 +15,9 @@ import (
 // It contains the GroupVersionKind of the resource and the source of this information for logging purposes.
 type DeletionBlockingResource struct {
 	// This is the GroupVersionKind of the resource that should block deletion.
-	metav1.GroupVersionKind
+	metav1.GroupVersionKind `json:",inline"`
 	// Source is where this GVK comes from, e.g. config or a service provider. It is used for logging purposes.
-	Source string
+	Source string `json:"source"`
 }
 
 func (dbr *DeletionBlockingResource) DeepCopy() *DeletionBlockingResource {
