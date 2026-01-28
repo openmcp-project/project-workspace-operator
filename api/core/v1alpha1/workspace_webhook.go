@@ -10,7 +10,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -34,8 +33,7 @@ func (r *Workspace) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manage
 		Identity:     identity,
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+	return ctrl.NewWebhookManagedBy(mgr, r).
 		WithDefaulter(wswh).
 		WithValidator(wswh).
 		Complete()
@@ -43,10 +41,10 @@ func (r *Workspace) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manage
 
 // +kubebuilder:webhook:path=/mutate-core-openmcp-cloud-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace.openmcp.cloud,admissionReviewVersions=v1
 
-var _ webhook.CustomDefaulter = &WorkspaceWebhook{}
+var _ admission.Defaulter[*Workspace] = &WorkspaceWebhook{}
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
-func (w *WorkspaceWebhook) Default(ctx context.Context, obj runtime.Object) error {
+// Default implements admission.Defaulter so a webhook will be registered for the type
+func (w *WorkspaceWebhook) Default(ctx context.Context, obj *Workspace) error {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return err
@@ -64,10 +62,10 @@ func (w *WorkspaceWebhook) Default(ctx context.Context, obj runtime.Object) erro
 
 // +kubebuilder:webhook:path=/validate-core-openmcp-cloud-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=workspaces,verbs=create;update;delete,versions=v1alpha1,name=vworkspace.openmcp.cloud,admissionReviewVersions=v1
 
-var _ webhook.CustomValidator = &WorkspaceWebhook{}
+var _ admission.Validator[*Workspace] = &WorkspaceWebhook{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *Workspace) (warnings admission.Warnings, err error) {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return
@@ -89,8 +87,8 @@ func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj runtime.Objec
 	return
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type
+func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *Workspace) (warnings admission.Warnings, err error) {
 	oldWorkspace, err := expectWorkspace(oldObj)
 	if err != nil {
 		return
@@ -130,8 +128,8 @@ func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj ru
 	return
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type
+func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj *Workspace) (warnings admission.Warnings, err error) {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return

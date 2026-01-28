@@ -9,7 +9,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -33,8 +32,7 @@ func (p *Project) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manager,
 		Identity:     identity,
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(p).
+	return ctrl.NewWebhookManagedBy(mgr, p).
 		WithDefaulter(pwh).
 		WithValidator(pwh).
 		Complete()
@@ -42,10 +40,10 @@ func (p *Project) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manager,
 
 // +kubebuilder:webhook:path=/mutate-core-openmcp-cloud-v1alpha1-project,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update,versions=v1alpha1,name=mproject.openmcp.cloud,admissionReviewVersions=v1
 
-var _ webhook.CustomDefaulter = &ProjectWebhook{}
+var _ admission.Defaulter[*Project] = &ProjectWebhook{}
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
-func (p *ProjectWebhook) Default(ctx context.Context, obj runtime.Object) error {
+// Default implements admission.Defaulter[*Project] so a webhook will be registered for the type
+func (p *ProjectWebhook) Default(ctx context.Context, obj *Project) error {
 	project, err := expectProject(obj)
 	if err != nil {
 		return err
@@ -64,10 +62,10 @@ func (p *ProjectWebhook) Default(ctx context.Context, obj runtime.Object) error 
 
 // +kubebuilder:webhook:path=/validate-core-openmcp-cloud-v1alpha1-project,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=projects,verbs=create;update;delete,versions=v1alpha1,name=vproject.openmcp.cloud,admissionReviewVersions=v1
 
-var _ webhook.CustomValidator = &ProjectWebhook{}
+var _ admission.Validator[*Project] = &ProjectWebhook{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *ProjectWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateCreate implements admission.Validator[*Project] so a webhook will be registered for the type
+func (v *ProjectWebhook) ValidateCreate(ctx context.Context, obj *Project) (warnings admission.Warnings, err error) {
 	project, err := expectProject(obj)
 	if err != nil {
 		return
@@ -90,8 +88,8 @@ func (v *ProjectWebhook) ValidateCreate(ctx context.Context, obj runtime.Object)
 	return
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateUpdate implements admission.Validator[*Project] so a webhook will be registered for the type
+func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *Project) (warnings admission.Warnings, err error) {
 	oldProject, err := expectProject(oldObj)
 	if err != nil {
 		return
@@ -131,8 +129,8 @@ func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runt
 	return
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (v *ProjectWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (warnings admission.Warnings, err error) {
+// ValidateDelete implements admission.Validator[*Project] so a webhook will be registered for the type
+func (v *ProjectWebhook) ValidateDelete(ctx context.Context, obj *Project) (warnings admission.Warnings, err error) {
 	project, err := expectProject(obj)
 	if err != nil {
 		return
