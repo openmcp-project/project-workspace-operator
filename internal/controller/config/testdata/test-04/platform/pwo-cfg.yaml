@@ -1,0 +1,37 @@
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: ProjectWorkspaceConfig
+metadata:
+  name: project-workspace
+spec:
+  project:
+    resourcesBlockingDeletion:
+    - group: mygroup.project
+      kind: MyProjectBlockingResource
+      version: v1alpha1
+    additionalPermissions:
+      admin:
+      - apiGroups:
+        - mygroup.project
+        resources:
+        - myprojectadditionalresources1
+        - myprojectadditionalresources2
+        verbs:
+        - get
+        - update
+  workspace:
+    resourcesBlockingDeletion:
+    - group: mygroup.workspace
+      kind: MyWorkspaceBlockingResource1
+      version: v1alpha1
+    - group: mygroup.workspace
+      kind: MyWorkspaceBlockingResource2
+      version: v1alpha1
+    additionalPermissions:
+      admin:
+      - apiGroups:
+        - mygroup.workspace
+        resources:
+        - myworkspaceadditionalresources1
+        - myworkspaceadditionalresources2
+        verbs:
+        - '*'

@@ -150,60 +150,64 @@ func (o *InitOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to determine webhook secret name: %w", err)
 	}
 
-	// setup gateway for webhooks
-	dnsInstance := &dns.Instance{
-		Name:            whServiceName,
-		Namespace:       providerSystemNamespace,
-		SubDomainPrefix: "pwo-webhooks",
-		BackendName:     whServiceName,
-		BackendPort:     int32(WebhookPortSvc),
-	}
-	dnsReconciler := dns.NewReconciler()
-	timeout := 3 * time.Minute
-	log.Info("Verifying default Gateway is available", "timeout", timeout.String())
-	waitCtx, cancelCtx := context.WithTimeout(ctx, timeout)
-	defer cancelCtx()
 	var gatewayResult dns.GatewayReconcileResult
-	err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		gatewayResult, err = dnsReconciler.ReconcileGateway(ctx, dnsInstance, o.PlatformCluster)
+	if os.Getenv("SKIP_GATEWAY") != "true" {
+		// setup gateway for webhooks
+		dnsInstance := &dns.Instance{
+			Name:            whServiceName,
+			Namespace:       providerSystemNamespace,
+			SubDomainPrefix: "pwo-webhooks",
+			BackendName:     whServiceName,
+			BackendPort:     int32(WebhookPortSvc),
+		}
+		dnsReconciler := dns.NewReconciler()
+		timeout := 3 * time.Minute
+		log.Info("Verifying default Gateway is available", "timeout", timeout.String())
+		waitCtx, cancelCtx := context.WithTimeout(ctx, timeout)
+		defer cancelCtx()
+		err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			gatewayResult, err = dnsReconciler.ReconcileGateway(ctx, dnsInstance, o.PlatformCluster)
+			if err != nil {
+				log.Error(err, "Error reconciling Gateway, retrying...")
+				return false, nil
+			}
+			if gatewayResult.RequeueAfter > 0 {
+				log.Debug("Default Gateway is not yet available, retrying...")
+				return false, nil
+			}
+			return true, nil
+		})
 		if err != nil {
-			log.Error(err, "Error reconciling Gateway, retrying...")
-			return false, nil
+			return fmt.Errorf("default Gateway did not become available within %s: %w", timeout.String(), err)
 		}
-		if gatewayResult.RequeueAfter > 0 {
-			log.Debug("Default Gateway is not yet available, retrying...")
-			return false, nil
-		}
-		return true, nil
-	})
-	if err != nil {
-		return fmt.Errorf("default Gateway did not become available within %s: %w", timeout.String(), err)
-	}
-	log.Info("Default Gateway is available", "hostName", gatewayResult.HostName)
+		log.Info("Default Gateway is available", "hostName", gatewayResult.HostName)
 
-	log.Info("Waiting for TLS route to become ready", "timeout", timeout.String())
-	waitCtx, cancelCtx = context.WithTimeout(ctx, timeout)
-	defer cancelCtx()
-	err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		if err := dnsReconciler.ReconcileTLSRoute(ctx, dnsInstance, o.PlatformCluster); err != nil {
-			log.Error(err, "Error reconciling TLS route, retrying...")
-			return false, nil
-		}
-		tlsReady, err := dnsReconciler.IsTLSRouteReady(ctx, dnsInstance, o.PlatformCluster)
+		log.Info("Waiting for TLS route to become ready", "timeout", timeout.String())
+		waitCtx, cancelCtx = context.WithTimeout(ctx, timeout)
+		defer cancelCtx()
+		err = wait.PollUntilContextTimeout(waitCtx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			if err := dnsReconciler.ReconcileTLSRoute(ctx, dnsInstance, o.PlatformCluster); err != nil {
+				log.Error(err, "Error reconciling TLS route, retrying...")
+				return false, nil
+			}
+			tlsReady, err := dnsReconciler.IsTLSRouteReady(ctx, dnsInstance, o.PlatformCluster)
+			if err != nil {
+				log.Error(err, "Error checking TLS route readiness, retrying...")
+				return false, nil
+			}
+			if !tlsReady {
+				log.Debug("TLS route is not yet ready, retrying...")
+				return false, nil
+			}
+			return true, nil
+		})
 		if err != nil {
-			log.Error(err, "Error checking TLS route readiness, retrying...")
-			return false, nil
+			return fmt.Errorf("TLS route did not become ready within %s: %w", timeout.String(), err)
 		}
-		if !tlsReady {
-			log.Debug("TLS route is not yet ready, retrying...")
-			return false, nil
-		}
-		return true, nil
-	})
-	if err != nil {
-		return fmt.Errorf("TLS route did not become ready within %s: %w", timeout.String(), err)
+		log.Info("TLS route is ready")
+	} else {
+		log.Info("Skipping Gateway setup as per SKIP_GATEWAY environment variable")
 	}
-	log.Info("TLS route is ready")
 
 	installOpts := []webhooks.InstallOption{
 		webhooks.WithWebhookService{Name: whServiceName, Namespace: providerSystemNamespace},

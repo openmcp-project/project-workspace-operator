@@ -12,9 +12,7 @@ import (
 
 	authenticationv1 "k8s.io/api/authentication/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,11 +24,11 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
-	deployv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
+	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
 )
 
@@ -207,6 +205,13 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	setupLog.Info("Environment", "value", o.Environment)
 	setupLog.Info("ProviderName", "value", o.ProviderName)
 
+	setupLog.Info("Determining pod namespace")
+	podNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
+	if podNamespace == "" {
+		return fmt.Errorf("unable to determine pod namespace, env var '%s' must be set", openmcpconst.EnvVariablePodNamespace)
+	}
+	setupLog.Info("Pod Namespace", "value", podNamespace)
+
 	setupLog.Info("Fetching ProjectWorkspaceConfig")
 	pwc := &pwv1alpha1.ProjectWorkspaceConfig{}
 	if err := o.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: o.ProviderName}, pwc); err != nil {
@@ -218,8 +223,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	}
 
 	setupLog.Info("Getting access to the onboarding cluster")
-	onboardingScheme := runtime.NewScheme()
-	providerscheme.InstallOperatorAPIsOnboarding(onboardingScheme)
+	onboardingScheme := providerscheme.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 
 	providerSystemNamespace := os.Getenv(openmcpconst.EnvVariablePodNamespace)
 	if providerSystemNamespace == "" {
@@ -240,16 +244,6 @@ func (o *RunOptions) Run(ctx context.Context) error {
 					Verbs:     []string{"*"},
 				},
 				{
-					APIGroups: []string{pwv1alpha1.GroupName},
-					Resources: []string{"*"},
-					Verbs:     []string{"list", "get"},
-				},
-				{
-					APIGroups: []string{"apiextensions.k8s.io"},
-					Resources: []string{"customresourcedefinitions"},
-					Verbs:     []string{"list", "get"},
-				},
-				{
 					APIGroups: []string{""},
 					Resources: []string{"namespaces"},
 					Verbs:     []string{"*"},
@@ -267,76 +261,9 @@ func (o *RunOptions) Run(ctx context.Context) error {
 			},
 		},
 	}
-	blockingAPIGroups := sets.New[string]()
-	for _, pb := range pwc.Spec.Project.ResourcesBlockingDeletion {
-		if pb.Group != pwv1alpha1.GroupName {
-			blockingAPIGroups.Insert(pb.Group)
-		}
-	}
-	for _, wsb := range pwc.Spec.Workspace.ResourcesBlockingDeletion {
-		if wsb.Group != pwv1alpha1.GroupName {
-			blockingAPIGroups.Insert(wsb.Group)
-		}
-	}
-	for _, bg := range sets.List(blockingAPIGroups) {
-		onboadingClusterPermissions[0].Rules = append(onboadingClusterPermissions[0].Rules, rbacv1.PolicyRule{
-			APIGroups: []string{bg},
-			Resources: []string{"*"},
-			Verbs:     []string{"list", "get"},
-		})
-	}
 	onboardingCluster, err := clusterAccessManager.CreateAndWaitForCluster(ctx, clustersv1alpha1.PURPOSE_ONBOARDING, clustersv1alpha1.PURPOSE_ONBOARDING, onboardingScheme, onboadingClusterPermissions)
-
 	if err != nil {
 		return fmt.Errorf("error creating/updating onboarding cluster: %w", err)
-	}
-
-	setupLog.Info("Listing ServiceProvider resources")
-	sps := &deployv1alpha1.ServiceProviderList{}
-	if err := o.PlatformCluster.Client().List(ctx, sps); err != nil {
-		return fmt.Errorf("unable to list ServiceProvider resources: %w", err)
-	}
-	if len(sps.Items) > 0 {
-		setupLog.Info("Listing CRDs on the onboarding cluster to lookup service resources")
-		crds := apiextv1.CustomResourceDefinitionList{}
-		if err := onboardingCluster.Client().List(ctx, &crds); err != nil {
-			return fmt.Errorf("unable to list CRDs on onboarding cluster: %w", err)
-		}
-		if pwc.Spec.Workspace.AdditionalPermissions == nil {
-			pwc.Spec.Workspace.AdditionalPermissions = make(map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule)
-		}
-		groupToResources := map[string][]string{}
-		for _, sp := range sps.Items {
-			managedResources := sp.Status.Resources
-			for _, r := range managedResources {
-				// lookup plural name of resource from CRD
-				found := false
-				for _, crd := range crds.Items {
-					if crd.Spec.Group == r.Group && crd.Spec.Names.Kind == r.Kind {
-						groupToResources[r.Group] = append(groupToResources[r.Group], crd.Spec.Names.Plural)
-						setupLog.Info("Identified service resource", "serviceProvider", sp.Name, "group", r.Group, "kind", r.Kind, "resource", fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group))
-						found = true
-						break
-					}
-				}
-				if !found {
-					return fmt.Errorf("unable to find CRD for resource kind '%s' in api group '%s' managed by ServiceProvider %s", r.Kind, r.Group, sp.Name)
-				}
-			}
-		}
-		// add permissions to pwc spec
-		for apigroup, resources := range groupToResources {
-			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleAdmin], rbacv1.PolicyRule{
-				APIGroups: []string{apigroup},
-				Resources: resources,
-				Verbs:     []string{"*"},
-			})
-			pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView] = append(pwc.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView], rbacv1.PolicyRule{
-				APIGroups: []string{apigroup},
-				Resources: resources,
-				Verbs:     []string{"get", "list", "watch"},
-			})
-		}
 	}
 
 	// figure out own identity
@@ -375,6 +302,9 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to create manager: %w", err)
 	}
+	if err := mgr.Add(o.PlatformCluster.Cluster()); err != nil {
+		return fmt.Errorf("unable to add platform cluster to manager: %w", err)
+	}
 
 	if !pwc.Spec.Webhook.Disabled {
 		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
@@ -391,26 +321,38 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		os.Exit(1)
 	}
 
-	commonReconciler := core.CommonReconciler{
-		Client:                     mgr.GetClient(),
-		ControllerName:             core.ControllerName,
-		ProjectWorkspaceConfigSpec: pwc.Spec,
+	cr, err := clusterAccessManager.ClusterRequest(ctx, clustersv1alpha1.PURPOSE_ONBOARDING)
+	if err != nil {
+		return fmt.Errorf("unable to get cluster request for onboarding cluster: %w", err)
 	}
 
-	if err = (&core.ProjectReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		CommonReconciler: commonReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("unable to create Project controller: %w", err)
+	cfgCtrl, err := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil, podNamespace)
+	if err != nil {
+		return fmt.Errorf("unable to create ProjectWorkspaceConfig controller: %w", err)
+	}
+	if err := cfgCtrl.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to add ProjectWorkspaceConfig controller to manager: %w", err)
 	}
 
-	if err = (&core.WorkspaceReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		CommonReconciler: commonReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("unable to create Workspace controller: %w", err)
+	commonReconciler := &core.CommonReconciler{
+		ControllerName: core.ControllerName,
+		Config:         cfgCtrl,
+	}
+
+	pr, err := core.NewProjectReconciler(mgr.GetScheme(), commonReconciler)
+	if err != nil {
+		return fmt.Errorf("unable to create Project reconciler: %w", err)
+	}
+	if err := pr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to add Project controller to manager: %w", err)
+	}
+
+	wr, err := core.NewWorkspaceReconciler(mgr.GetScheme(), commonReconciler)
+	if err != nil {
+		return fmt.Errorf("unable to create Workspace reconciler: %w", err)
+	}
+	if err := wr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to add Workspace controller to manager: %w", err)
 	}
 
 	if o.MetricsCertWatcher != nil {

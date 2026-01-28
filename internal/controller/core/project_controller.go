@@ -14,14 +14,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/openmcp-project/controller-utils/pkg/clusters"
+
 	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 // ProjectReconciler reconciles a Project object
 type ProjectReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-	CommonReconciler
+	OnboardingStatic *clusters.Cluster
+	Scheme           *runtime.Scheme
+	*CommonReconciler
+}
+
+func NewProjectReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*ProjectReconciler, error) {
+	pr := &ProjectReconciler{
+		Scheme:           scheme,
+		CommonReconciler: cr,
+	}
+
+	onboardingClusterStatic, err := cr.Config.OnboardingClusterStatic(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	pr.OnboardingStatic = onboardingClusterStatic
+
+	return pr, nil
 }
 
 // +kubebuilder:rbac:groups=core.openmcp.cloud,resources=projects,verbs=get;list;watch;create;update;patch;delete
@@ -36,7 +53,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log := log.FromContext(ctx)
 
 	project := &v1alpha1.Project{}
-	if err := r.Get(ctx, req.NamespacedName, project); err != nil {
+	if err := r.OnboardingStatic.Client().Get(ctx, req.NamespacedName, project); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Project not found")
 			return ctrl.Result{}, nil
@@ -58,7 +75,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 	if hasRemainingContent {
-		if err := r.Status().Update(ctx, project); err != nil {
+		if err := r.OnboardingStatic.Client().Status().Update(ctx, project); err != nil {
 			log.Error(err, "failed to update status")
 		}
 
@@ -68,7 +85,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	deleted, dresult, err := r.handleDelete(ctx, project, func() error {
-		if err := r.Delete(ctx, projectNamespace); err != nil {
+		if err := r.OnboardingStatic.Client().Delete(ctx, projectNamespace); err != nil {
 			return client.IgnoreNotFound(err)
 		}
 
@@ -84,7 +101,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Always update status
 	defer func() {
-		if err := r.Status().Update(ctx, project); err != nil {
+		if err := r.OnboardingStatic.Client().Status().Update(ctx, project); err != nil {
 			log.Error(err, "failed to update status")
 		}
 	}()
@@ -93,7 +110,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Namespace Creation
 	//
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, projectNamespace, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), projectNamespace, func() error {
 		setProjectLabel(projectNamespace, project.Name)
 		r.applyManagementLabel(projectNamespace)
 		return nil
@@ -131,6 +148,7 @@ func (r *ProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *ProjectReconciler) createOrUpdateRoleBinding(ctx context.Context, project *v1alpha1.Project, role v1alpha1.ProjectMemberRole) error {
 	log := log.FromContext(ctx)
+
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      roleBindingForRole(role),
@@ -138,7 +156,7 @@ func (r *ProjectReconciler) createOrUpdateRoleBinding(ctx context.Context, proje
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, roleBinding, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), roleBinding, func() error {
 		r.applyManagementLabel(roleBinding)
 
 		roleBinding.Subjects = getSubjectsForProjectRole(project, role)
@@ -191,7 +209,7 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 			},
 		}
 
-		result, err := controllerutil.CreateOrUpdate(ctx, r.Client, clusterRole, func() error {
+		result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), clusterRole, func() error {
 			r.applyManagementLabel(clusterRole)
 
 			clusterRole.Rules = []rbacv1.PolicyRule{
@@ -223,7 +241,7 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 			},
 		}
 
-		result, err = controllerutil.CreateOrUpdate(ctx, r.Client, clusterRoleBinding, func() error {
+		result, err = controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), clusterRoleBinding, func() error {
 			r.applyManagementLabel(clusterRoleBinding)
 
 			clusterRoleBinding.Subjects = getSubjectsForProjectRole(project, role)
