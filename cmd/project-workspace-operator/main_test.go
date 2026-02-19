@@ -17,7 +17,7 @@ func Test_NewProjectWorkspaceOperatorCommand(t *testing.T) {
 	cmds := cmd.Commands()
 	assert.Len(t, cmds, 3)
 
-	cmdNames := []string{}
+	cmdNames := make([]string, 0, len(cmds))
 	for _, c := range cmds {
 		cmdNames = append(cmdNames, c.Name())
 	}
