@@ -505,7 +505,7 @@ func (c *PWOConfigController) ProjectPermissionsForRole(ctx context.Context, rol
 func (c *PWOConfigController) projectPermissionsForRoleInternal(roleID string) ([]rbacv1.PolicyRule, error) {
 	permissibleProjectResources := append([]APIGroupsWithResources{}, BuiltinPermissibleProjectResources...)
 	permissibleProjectResources = append(permissibleProjectResources, c.permissibleProjectResources...)
-	res := []rbacv1.PolicyRule{}
+	res := make([]rbacv1.PolicyRule, 0, len(permissibleProjectResources))
 	tmp, err := permissionsForRoleHelper(roleID, permissibleProjectResources)
 	if err != nil {
 		return nil, err
@@ -526,7 +526,7 @@ func (c *PWOConfigController) WorkspacePermissionsForRole(ctx context.Context, r
 func (c *PWOConfigController) workspacePermissionsForRoleInternal(roleID string) ([]rbacv1.PolicyRule, error) {
 	permissibleWorkspaceResources := append([]APIGroupsWithResources{}, BuiltinPermissibleWorkspaceResources...)
 	permissibleWorkspaceResources = append(permissibleWorkspaceResources, c.permissibleWorkspaceResources...)
-	res := []rbacv1.PolicyRule{}
+	res := make([]rbacv1.PolicyRule, 0, len(permissibleWorkspaceResources))
 	tmp, err := permissionsForRoleHelper(roleID, permissibleWorkspaceResources)
 	if err != nil {
 		return nil, err
