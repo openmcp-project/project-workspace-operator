@@ -30,6 +30,7 @@ import (
 	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
+	pwwebhooks "github.com/openmcp-project/project-workspace-operator/internal/webhooks"
 )
 
 var setupLog logging.Logger
@@ -306,15 +307,6 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to add platform cluster to manager: %w", err)
 	}
 
-	if !pwc.Spec.Webhook.Disabled {
-		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
-			return fmt.Errorf("unable to setup Project webhook: %w", err)
-		}
-		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(ctx, mgr, pwc.Spec.MemberOverridesName, identity); err != nil {
-			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
-		}
-	}
-
 	rbacSetup := core.NewRBACSetup(setupLog.Logr(), onboardingCluster.Client(), core.ControllerName, pwc.Spec)
 	if err := rbacSetup.EnsureResources(ctx); err != nil {
 		setupLog.Error(err, "unable to create or update RBAC resources")
@@ -332,6 +324,15 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	}
 	if err := cfgCtrl.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to add ProjectWorkspaceConfig controller to manager: %w", err)
+	}
+
+	if !pwc.Spec.Webhook.Disabled {
+		if err = pwwebhooks.SetupProjectWebhookWithManager(ctx, mgr, identity, cfgCtrl); err != nil {
+			return fmt.Errorf("unable to setup Project webhook: %w", err)
+		}
+		if err = pwwebhooks.SetupWorkspaceWebhookWithManager(ctx, mgr, identity, cfgCtrl); err != nil {
+			return fmt.Errorf("unable to setup Workspace webhook: %w", err)
+		}
 	}
 
 	commonReconciler := &core.CommonReconciler{

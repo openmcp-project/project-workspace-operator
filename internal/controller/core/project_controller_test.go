@@ -252,7 +252,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 						},
 						Source: pwv1alpha1.SourceProjectWorkspaceConfig,
 					},
-				}, nil),
+				}, nil, nil),
 				ControllerName: "test",
 			},
 			)

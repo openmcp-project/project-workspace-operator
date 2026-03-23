@@ -168,7 +168,7 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil),
+				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil, nil),
 				ControllerName: "test-controller",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))
@@ -250,7 +250,7 @@ func Test_CommonReconciler_ensureFinalizer(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil),
+				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil, nil),
 				ControllerName: "test-controller",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))

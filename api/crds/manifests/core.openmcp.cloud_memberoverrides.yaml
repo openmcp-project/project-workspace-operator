@@ -69,6 +69,8 @@ spec:
                             enum:
                             - project
                             - workspace
+                            - Project
+                            - Workspace
                             type: string
                           name:
                             description: Name of the object being referenced.

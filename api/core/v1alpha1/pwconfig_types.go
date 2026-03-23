@@ -20,10 +20,13 @@ type ProjectWorkspaceConfigSpec struct {
 	Project ProjectConfig `json:"project"`
 	// +optional
 	Workspace WorkspaceConfig `json:"workspace"`
-	// MemberOverridesName is the name of the MemberOverrides resource that should be used to manage admin access to the projects and workspaces.
+	// MemberOverrides allows to specify users and groups which should have admin permissions to projects and workspaces.
+	// This basically disables the 'you must be admin of a project/workspace in order to modify it' check.
 	// Leave empty to disable.
+	// Note that this configuration is only relevant for the v2 variant of the operator. For v1, the member overrides are specified
+	// via a separate MemberOverrides resource and the controller is given its name as an command-line argument.
 	// +optional
-	MemberOverridesName string `json:"memberOverridesName,omitempty"`
+	MemberOverrides MemberOverridesV2 `json:"memberOverrides,omitempty"`
 	// Webhook contains the configuration for the webhooks.
 	// +optional
 	Webhook WebhookConfig `json:"webhook"`

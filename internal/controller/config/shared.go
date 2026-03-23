@@ -47,6 +47,9 @@ type SharedInformation interface {
 	// WorkspacePermissionsForRole returns the permissions that users with the given role should have in a workspace namespace.
 	WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error)
 
+	// MemberOverrides returns the users and groups that should have admin permissions to projects and workspaces, bypassing the 'you must be admin of a project/workspace in order to modify it' check.
+	MemberOverrides(ctx context.Context) (pwov1alpha1.MemberOverridesV2, error)
+
 	// OnboardingClusterStatic returns the static access to the onboarding cluster.
 	// It has permissions for namespaces, rbac resources, CRDs, and Project/Workspace resources.
 	// For listing resources that potentially block deletion of projects or workspaces, the dynamic client needs to be used.

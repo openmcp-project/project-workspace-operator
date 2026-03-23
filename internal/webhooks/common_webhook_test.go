@@ -1,4 +1,4 @@
-package v1alpha1
+package webhooks
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 func TestCompareStringMapValue(t *testing.T) {
@@ -84,12 +86,12 @@ func TestVerifyCreatedByUnchanged(t *testing.T) {
 			description: "returns no error if objA and objB contain a CreatedByAnnotation with the same value",
 			objA: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					CreatedByAnnotation: "test",
+					pwv1alpha1.CreatedByAnnotation: "test",
 				},
 			},
 			objB: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					CreatedByAnnotation: "test",
+					pwv1alpha1.CreatedByAnnotation: "test",
 				},
 			},
 		},
@@ -100,12 +102,12 @@ func TestVerifyCreatedByUnchanged(t *testing.T) {
 			description: "returns an error if objA and objB contain a CreatedByAnnotation with a different value",
 			objA: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					CreatedByAnnotation: "test1",
+					pwv1alpha1.CreatedByAnnotation: "test1",
 				},
 			},
 			objB: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					CreatedByAnnotation: "test2",
+					pwv1alpha1.CreatedByAnnotation: "test2",
 				},
 			},
 			expectError: true,
@@ -140,7 +142,7 @@ func TestSetCreatedBy(t *testing.T) {
 				},
 			},
 			expectedAnnotations: map[string]string{
-				CreatedByAnnotation: "john.doe@test.com",
+				pwv1alpha1.CreatedByAnnotation: "john.doe@test.com",
 			},
 		},
 		{

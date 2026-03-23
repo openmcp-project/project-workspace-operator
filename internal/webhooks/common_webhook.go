@@ -1,4 +1,4 @@
-package v1alpha1
+package webhooks
 
 import (
 	"context"
@@ -8,11 +8,13 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 var (
 	// errCreatedByImmutable is the error that is returned when the value of the resource creator annotation has been changed by the user.
-	errCreatedByImmutable = fmt.Errorf("annotation %s is immutable", CreatedByAnnotation)
+	errCreatedByImmutable = fmt.Errorf("annotation %s is immutable", pwv1alpha1.CreatedByAnnotation)
 
 	// errRequestingUserNoAccess is the error that is returned when the user who is creating/updating a project or workspace would lock themselves out.
 	errRequestingUserNoAccess = func(username string) error {
@@ -29,7 +31,7 @@ func compareStringMapValue(a, b map[string]string, key string) bool {
 // verifyCreatedByUnchanged checks if the value of the annotation that contains the name of the resource creator has been changed.
 // Returns an error if the value has been changed or "nil" if it's the same.
 func verifyCreatedByUnchanged(old, new metav1.Object) error {
-	if compareStringMapValue(old.GetAnnotations(), new.GetAnnotations(), CreatedByAnnotation) {
+	if compareStringMapValue(old.GetAnnotations(), new.GetAnnotations(), pwv1alpha1.CreatedByAnnotation) {
 		return nil
 	}
 
@@ -43,7 +45,7 @@ func setCreatedBy(obj metav1.Object, req admission.Request) {
 		return
 	}
 
-	setMetaDataAnnotation(obj, CreatedByAnnotation, req.UserInfo.Username)
+	setMetaDataAnnotation(obj, pwv1alpha1.CreatedByAnnotation, req.UserInfo.Username)
 }
 
 // setMetaDataAnnotation sets the annotation on the given object.

@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/collections"
@@ -16,7 +17,7 @@ import (
 	"github.com/openmcp-project/project-workspace-operator/api/install"
 )
 
-func NewV1Config(onboardingClusterConfig *rest.Config, cfg *pwov1alpha1.ProjectWorkspaceConfig) (*V1Config, error) {
+func NewV1Config(onboardingClusterConfig *rest.Config, cfg *pwov1alpha1.ProjectWorkspaceConfig, memberOverridesName *string) (*V1Config, error) {
 	res := &V1Config{}
 	res.onboardingCluster = clusters.New("onboarding").WithRESTConfig(onboardingClusterConfig)
 	if err := res.onboardingCluster.InitializeClient(install.InstallOperatorAPIsOnboarding(runtime.NewScheme())); err != nil {
@@ -66,6 +67,12 @@ func NewV1Config(onboardingClusterConfig *rest.Config, cfg *pwov1alpha1.ProjectW
 		}
 		res.workspacePermissionsByRole[roleID] = permissions
 	}
+
+	// fetch member overrides from cluster, if specified
+	if memberOverridesName != nil {
+		res.memberOverridesName = *memberOverridesName
+	}
+
 	return res, nil
 }
 
@@ -73,6 +80,7 @@ type V1Config struct {
 	onboardingCluster                  *clusters.Cluster
 	resourcesBlockingProjectDeletion   []DeletionBlockingResource
 	resourcesBlockingWorkspaceDeletion []DeletionBlockingResource
+	memberOverridesName                string
 	projectPermissionsByRole           map[string][]rbacv1.PolicyRule
 	workspacePermissionsByRole         map[string][]rbacv1.PolicyRule
 }
@@ -106,7 +114,26 @@ func (v *V1Config) ProjectPermissionsForRole(ctx context.Context, roleID string)
 	return permissions, nil
 }
 
+// MemberOverrides implements SharedInformation.
+func (v *V1Config) MemberOverrides(ctx context.Context) (pwov1alpha1.MemberOverridesV2, error) {
+	if v == nil {
+		return nil, nil
+	}
+	if v.memberOverridesName != "" {
+		mo := &pwov1alpha1.MemberOverrides{}
+		if err := v.onboardingCluster.Client().Get(ctx, client.ObjectKey{Name: v.memberOverridesName}, mo); err != nil {
+			return nil, fmt.Errorf("error fetching member overrides from onboarding cluster: %w", err)
+		}
+		return mo.Spec.MemberOverrides, nil
+	}
+	return nil, nil
+}
+
 // WorkspacePermissionsForRole implements SharedInformation.
 func (v *V1Config) WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
-	panic("unimplemented")
+	permissions, exists := v.workspacePermissionsByRole[roleID]
+	if !exists {
+		return nil, fmt.Errorf("unknown role ID")
+	}
+	return permissions, nil
 }

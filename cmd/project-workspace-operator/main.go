@@ -33,6 +33,7 @@ import (
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	pwocrds "github.com/openmcp-project/project-workspace-operator/api/crds"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	pwwebhooks "github.com/openmcp-project/project-workspace-operator/internal/webhooks"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -111,7 +112,7 @@ func (o *Options) run() {
 		os.Exit(1)
 	}
 
-	v1cfg, err := sharedconfig.NewV1Config(o.CrateClusterConfig, o.ProjectWorkspaceConfig)
+	v1cfg, err := sharedconfig.NewV1Config(o.CrateClusterConfig, o.ProjectWorkspaceConfig, o.MemberOverridesName)
 	if err != nil {
 		setupLog.Error(err, "unable to initialize shared config")
 		os.Exit(1)
@@ -151,12 +152,12 @@ func (o *Options) run() {
 		identity := review.Status.UserInfo.Username
 		setupLog.Info("Determined own identity to exclude from webhook validation", "identity", identity)
 
-		if err = (&pwv1alpha1.Project{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
+		if err = pwwebhooks.SetupProjectWebhookWithManager(runContext, mgr, identity, v1cfg); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 			os.Exit(1)
 		}
 
-		if err = (&pwv1alpha1.Workspace{}).SetupWebhookWithManager(runContext, mgr, *o.MemberOverridesName, identity); err != nil {
+		if err = pwwebhooks.SetupWorkspaceWebhookWithManager(runContext, mgr, identity, v1cfg); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
