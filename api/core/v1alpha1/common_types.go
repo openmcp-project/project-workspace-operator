@@ -56,8 +56,10 @@ type MemberOverrides struct {
 	Status MemberOverridesStatus `json:"status,omitempty"`
 }
 type MemberOverridesSpec struct {
-	MemberOverrides []MemberOverride `json:"memberOverrides"`
+	MemberOverrides MemberOverridesV2 `json:"memberOverrides"`
 }
+
+type MemberOverridesV2 []MemberOverride
 
 type MemberOverridesStatus struct{}
 
@@ -78,11 +80,16 @@ type MemberOverride struct {
 }
 
 type OverrideResource struct {
-	// +kubebuilder:validation:Enum=project;workspace
+	// +kubebuilder:validation:Enum=project;workspace;Project;Workspace
 	Kind string `json:"kind"`
 	// Name of the object being referenced.
 	Name string `json:"name"`
 }
+
+const (
+	OverrideResourceKindProject   = "Project"
+	OverrideResourceKindWorkspace = "Workspace"
+)
 
 // +kubebuilder:object:root=true
 type MemberOverridesList struct {
@@ -96,7 +103,14 @@ func init() {
 }
 
 func (m *MemberOverrides) HasAdminOverrideForResource(userInfo *authv1.UserInfo, resourceName, resourceKind string) bool {
-	for _, override := range m.Spec.MemberOverrides {
+	if m == nil {
+		return false
+	}
+	return m.Spec.MemberOverrides.HasAdminOverrideForResource(userInfo, resourceName, resourceKind)
+}
+
+func (m MemberOverridesV2) HasAdminOverrideForResource(userInfo *authv1.UserInfo, resourceName, resourceKind string) bool {
+	for _, override := range m {
 		if !override.hasAdminRole() {
 			continue
 		}

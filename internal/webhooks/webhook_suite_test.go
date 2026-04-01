@@ -1,4 +1,4 @@
-package v1alpha1
+package webhooks
 
 import (
 	"context"
@@ -31,6 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -44,6 +47,8 @@ var testEnv *envtest.Environment
 var ctx context.Context
 var cancel context.CancelFunc
 var testScheme *apimachineryruntime.Scheme
+
+var sharedInformationForTests *config.FakeSharedInformation
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -62,10 +67,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: false,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			Paths: []string{filepath.Join("..", "..", "..", "config", "webhook")},
+			Paths: []string{filepath.Join("..", "..", "config", "webhook")},
 		},
 	}
 
@@ -75,7 +80,7 @@ var _ = BeforeSuite(func() {
 	Expect(cfg).NotTo(BeNil())
 
 	testScheme = apimachineryruntime.NewScheme()
-	err = AddToScheme(testScheme)
+	err = pwv1alpha1.AddToScheme(testScheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = admissionv1.AddToScheme(testScheme)
@@ -108,10 +113,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&Project{}).SetupWebhookWithManager(ctx, mgr, "test-override", identity)
+	sharedInformationForTests = config.NewFakeSharedInformation(nil, nil, nil, nil, nil, nil)
+
+	err = SetupProjectWebhookWithManager(ctx, mgr, identity, sharedInformationForTests)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&Workspace{}).SetupWebhookWithManager(ctx, mgr, "test-override", identity)
+	err = SetupWorkspaceWebhookWithManager(ctx, mgr, identity, sharedInformationForTests)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook
@@ -150,7 +157,7 @@ var _ = BeforeSuite(func() {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{GroupVersion.Group},
+				APIGroups: []string{pwv1alpha1.GroupVersion.Group},
 				Resources: []string{"projects", "workspaces"},
 				Verbs:     []string{"*"},
 			},

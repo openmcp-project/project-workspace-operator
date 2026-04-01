@@ -297,7 +297,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 						},
 						Source: pwv1alpha1.SourceProjectWorkspaceConfig,
 					},
-				}),
+				}, nil),
 			},
 			)
 			assert.NoError(t, err)

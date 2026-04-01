@@ -101,6 +101,7 @@ type PWOConfigController struct {
 	projectPermissionsFromConfig   map[string][]rbacv1.PolicyRule
 	workspacePermissionsFromConfig map[string][]rbacv1.PolicyRule
 	onboardingClusterAccessDynamic *clusters.Cluster
+	memberOverrides                []pwov1alpha1.MemberOverride
 	missingConfig                  bool
 }
 
@@ -267,6 +268,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 		c.resourcesBlockingWorkspaceDeletion = nil
 		c.projectPermissionsFromConfig = nil
 		c.workspacePermissionsFromConfig = nil
+		c.memberOverrides = nil
 		c.missingConfig = true
 		log.Info("Resetting state and deleting AccessRequest because ProjectWorkspaceConfig is missing or in deletion")
 		return c.Car.ReconcileDelete(ctx, req)
@@ -314,6 +316,9 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	for role, rules := range cfg.Spec.Workspace.AdditionalPermissions {
 		newWorkspacePermissionsFromConfig[WorkspaceMemberRoleToRoleID(role)] = rules
 	}
+
+	// set member overrides
+	c.memberOverrides = cfg.Spec.MemberOverrides
 
 	// fetch ServiceProvider resources to get their registered resource types
 	log.Debug("Fetching ServiceProvider resources to get registered resource types")
@@ -463,6 +468,17 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 // SharedInformation Implementation //
 
 var _ SharedInformation = &PWOConfigController{}
+
+func (c *PWOConfigController) MemberOverrides(ctx context.Context) (pwov1alpha1.MemberOverridesV2, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	if c.missingConfig {
+		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
+	}
+	res := make(pwov1alpha1.MemberOverridesV2, len(c.memberOverrides))
+	copy(res, c.memberOverrides)
+	return res, nil
+}
 
 func (c *PWOConfigController) ResourcesBlockingProjectDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
 	c.lock.RLock()

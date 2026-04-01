@@ -1,43 +1,38 @@
-package v1alpha1
+package webhooks
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
 var _ = Describe("Workspace Webhook", func() {
 	BeforeEach(func() {
-		// this must be cleaned with each run because it's name is passed to the webhook at startup. Creating a new one with a different name won't work.
-		err := k8sClient.Delete(ctx, &MemberOverrides{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-override",
-			},
-		})
-		Expect(err).To(Or(BeNil(), MatchError(apierrors.IsNotFound, "NotFound")))
+		sharedInformationForTests.MemberOverridesData = nil
 	})
 
 	Context("When creating a Workspace", func() {
 		It("Should allow to create the workspace by the admin user", func() {
 			var err error
 
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      uniqueName(),
 					Namespace: "default",
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -51,21 +46,21 @@ var _ = Describe("Workspace Webhook", func() {
 		It("Should allow to create the workspace by a serviceaccount", func() {
 			var err error
 
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      uniqueName(),
 					Namespace: "default",
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind:      "ServiceAccount",
 								Name:      "admin",
 								Namespace: "kube-system",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -79,27 +74,27 @@ var _ = Describe("Workspace Webhook", func() {
 		It("should deny to create the workspace by a non-member user", func() {
 			var err error
 
-			project := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      uniqueName(),
 					Namespace: "default",
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "unknown",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
 				},
 			}
 
-			err = realUserClient.Create(ctx, project)
+			err = realUserClient.Create(ctx, workspace)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -116,52 +111,42 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override := &MemberOverrides{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-override",
-				},
-				Spec: MemberOverridesSpec{
-					MemberOverrides: []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+				{
+					Subject: pwv1alpha1.Subject{
+						Kind: "User",
+						Name: "admin",
+					},
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
+					},
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []OverrideRole{
-								OverrideRoleAdmin,
-							},
-							Resources: []OverrideResource{
-								{
-									Kind: "project",
-									Name: "test",
-								},
-								{
-									Kind: "workspace",
-									Name: workspaceName,
-								},
-							},
+							Kind: pwv1alpha1.OverrideResourceKindProject,
+							Name: "test",
+						},
+						{
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
+							Name: workspaceName,
 						},
 					},
 				},
 			}
 
-			err = k8sClient.Create(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      workspaceName,
 					Namespace: namespace.Name,
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "second-admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -185,53 +170,43 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override := &MemberOverrides{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-override",
-				},
-				Spec: MemberOverridesSpec{
-					MemberOverrides: []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+				{
+					Subject: pwv1alpha1.Subject{
+						Kind:      "ServiceAccount",
+						Name:      "admin",
+						Namespace: "kube-system",
+					},
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
+					},
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Subject: Subject{
-								Kind:      "ServiceAccount",
-								Name:      "admin",
-								Namespace: "kube-system",
-							},
-							Roles: []OverrideRole{
-								OverrideRoleAdmin,
-							},
-							Resources: []OverrideResource{
-								{
-									Kind: "project",
-									Name: "test-sa",
-								},
-								{
-									Kind: "workspace",
-									Name: workspaceName,
-								},
-							},
+							Kind: pwv1alpha1.OverrideResourceKindProject,
+							Name: "test-sa",
+						},
+						{
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
+							Name: workspaceName,
 						},
 					},
 				},
 			}
-
-			err = k8sClient.Create(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      workspaceName,
 					Namespace: namespace.Name,
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind:      "ServiceAccount",
 								Name:      "second-admin",
 								Namespace: "kube-system",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -255,52 +230,42 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override := &MemberOverrides{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-override",
-				},
-				Spec: MemberOverridesSpec{
-					MemberOverrides: []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+				{
+					Subject: pwv1alpha1.Subject{
+						Kind: "Group",
+						Name: "system:admin",
+					},
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
+					},
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Subject: Subject{
-								Kind: "Group",
-								Name: "system:admin",
-							},
-							Roles: []OverrideRole{
-								OverrideRoleAdmin,
-							},
-							Resources: []OverrideResource{
-								{
-									Kind: "project",
-									Name: "test-group",
-								},
-								{
-									Kind: "workspace",
-									Name: workspaceName,
-								},
-							},
+							Kind: pwv1alpha1.OverrideResourceKindProject,
+							Name: "test-group",
+						},
+						{
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
+							Name: workspaceName,
 						},
 					},
 				},
 			}
 
-			err = k8sClient.Create(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      workspaceName,
 					Namespace: namespace.Name,
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "second-admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -324,52 +289,42 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override := &MemberOverrides{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-override",
-				},
-				Spec: MemberOverridesSpec{
-					MemberOverrides: []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+				{
+					Subject: pwv1alpha1.Subject{
+						Kind: "User",
+						Name: "another-admin",
+					},
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
+					},
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "another-admin",
-							},
-							Roles: []OverrideRole{
-								OverrideRoleAdmin,
-							},
-							Resources: []OverrideResource{
-								{
-									Kind: "project",
-									Name: "test3",
-								},
-								{
-									Kind: "workspace",
-									Name: workspaceName,
-								},
-							},
+							Kind: pwv1alpha1.OverrideResourceKindProject,
+							Name: "test3",
+						},
+						{
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
+							Name: workspaceName,
 						},
 					},
 				},
 			}
 
-			err = k8sClient.Create(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      workspaceName,
 					Namespace: namespace.Name,
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "second-admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -385,20 +340,20 @@ var _ = Describe("Workspace Webhook", func() {
 		It("should deny removing self from the workspace", func() {
 			var err error
 
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      uniqueName(),
 					Namespace: "default",
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -408,7 +363,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = realUserClient.Create(ctx, workspace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			workspace.Spec.Members = []WorkspaceMember{}
+			workspace.Spec.Members = []pwv1alpha1.WorkspaceMember{}
 
 			err = realUserClient.Update(ctx, workspace)
 			Expect(err).To(HaveOccurred())
@@ -428,52 +383,42 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override := &MemberOverrides{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-override",
-				},
-				Spec: MemberOverridesSpec{
-					MemberOverrides: []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+				{
+					Subject: pwv1alpha1.Subject{
+						Kind: "User",
+						Name: "admin",
+					},
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
+					},
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Subject: Subject{
-								Kind: "User",
-								Name: "admin",
-							},
-							Roles: []OverrideRole{
-								OverrideRoleAdmin,
-							},
-							Resources: []OverrideResource{
-								{
-									Kind: "project",
-									Name: "test-parent",
-								},
-								{
-									Kind: "workspace",
-									Name: workspaceName,
-								},
-							},
+							Kind: pwv1alpha1.OverrideResourceKindProject,
+							Name: "test-parent",
+						},
+						{
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
+							Name: workspaceName,
 						},
 					},
 				},
 			}
 
-			err = k8sClient.Create(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			workspace := &Workspace{
+			workspace := &pwv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      workspaceName,
 					Namespace: namespace.Name,
 				},
-				Spec: WorkspaceSpec{
-					Members: []WorkspaceMember{
+				Spec: pwv1alpha1.WorkspaceSpec{
+					Members: []pwv1alpha1.WorkspaceMember{
 						{
-							Subject: Subject{
+							Subject: pwv1alpha1.Subject{
 								Kind: "User",
 								Name: "second-admin",
 							},
-							Roles: []WorkspaceMemberRole{
-								WorkspaceRoleAdmin,
+							Roles: []pwv1alpha1.WorkspaceMemberRole{
+								pwv1alpha1.WorkspaceRoleAdmin,
 							},
 						},
 					},
@@ -483,25 +428,23 @@ var _ = Describe("Workspace Webhook", func() {
 			err = realUserClient.Create(ctx, workspace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			override.Spec.MemberOverrides = []MemberOverride{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
 				{
-					Subject: Subject{
+					Subject: pwv1alpha1.Subject{
 						Kind: "User",
 						Name: "admin",
 					},
-					Roles: []OverrideRole{
-						OverrideRoleAdmin,
+					Roles: []pwv1alpha1.OverrideRole{
+						pwv1alpha1.OverrideRoleAdmin,
 					},
-					Resources: []OverrideResource{
+					Resources: []pwv1alpha1.OverrideResource{
 						{
-							Kind: "workspace",
+							Kind: pwv1alpha1.OverrideResourceKindWorkspace,
 							Name: workspaceName,
 						},
 					},
 				},
 			}
-			err = k8sClient.Update(ctx, override)
-			Expect(err).ShouldNot(HaveOccurred())
 
 			workspace.Labels = map[string]string{"key": "value"}
 			err = realUserClient.Update(ctx, workspace)

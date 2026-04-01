@@ -1,4 +1,4 @@
-package v1alpha1
+package webhooks
 
 import (
 	"context"
@@ -6,11 +6,13 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
 
 // log is for logging in this package.
@@ -22,18 +24,18 @@ type WorkspaceWebhook struct {
 
 	// Identity is the name of the entity (usually a service account) the project-workspace-operator uses to access the onboarding cluster.
 	// It is required to exclude the operator's own identity from validation checks.
-	Identity     string
-	OverrideName string
+	Identity          string
+	SharedInformation config.SharedInformation
 }
 
-func (r *Workspace) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manager, memberOverridesName, identity string) error {
+func SetupWorkspaceWebhookWithManager(ctx context.Context, mgr ctrl.Manager, identity string, si config.SharedInformation) error {
 	wswh := &WorkspaceWebhook{
-		Client:       mgr.GetClient(),
-		OverrideName: memberOverridesName,
-		Identity:     identity,
+		Client:            mgr.GetClient(),
+		SharedInformation: si,
+		Identity:          identity,
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr, r).
+	return ctrl.NewWebhookManagedBy(mgr, &pwv1alpha1.Workspace{}).
 		WithDefaulter(wswh).
 		WithValidator(wswh).
 		Complete()
@@ -41,10 +43,10 @@ func (r *Workspace) SetupWebhookWithManager(ctx context.Context, mgr ctrl.Manage
 
 // +kubebuilder:webhook:path=/mutate-core-openmcp-cloud-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace.openmcp.cloud,admissionReviewVersions=v1
 
-var _ admission.Defaulter[*Workspace] = &WorkspaceWebhook{}
+var _ admission.Defaulter[*pwv1alpha1.Workspace] = &WorkspaceWebhook{}
 
 // Default implements admission.Defaulter so a webhook will be registered for the type
-func (w *WorkspaceWebhook) Default(ctx context.Context, obj *Workspace) error {
+func (w *WorkspaceWebhook) Default(ctx context.Context, obj *pwv1alpha1.Workspace) error {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return err
@@ -62,10 +64,10 @@ func (w *WorkspaceWebhook) Default(ctx context.Context, obj *Workspace) error {
 
 // +kubebuilder:webhook:path=/validate-core-openmcp-cloud-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.openmcp.cloud,resources=workspaces,verbs=create;update;delete,versions=v1alpha1,name=vworkspace.openmcp.cloud,admissionReviewVersions=v1
 
-var _ admission.Validator[*Workspace] = &WorkspaceWebhook{}
+var _ admission.Validator[*pwv1alpha1.Workspace] = &WorkspaceWebhook{}
 
 // ValidateCreate implements admission.Validator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *Workspace) (warnings admission.Warnings, err error) {
+func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return
@@ -88,7 +90,7 @@ func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *Workspace) (
 }
 
 // ValidateUpdate implements admission.Validator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *Workspace) (warnings admission.Warnings, err error) {
+func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
 	oldWorkspace, err := expectWorkspace(oldObj)
 	if err != nil {
 		return
@@ -129,7 +131,7 @@ func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *W
 }
 
 // ValidateDelete implements admission.Validator so a webhook will be registered for the type
-func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj *Workspace) (warnings admission.Warnings, err error) {
+func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return
@@ -144,30 +146,26 @@ func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj *Workspace) (
 }
 
 // expectWorkspace casts the given runtime.Object to *Workspace. Returns an error in case the object can't be casted.
-func expectWorkspace(obj runtime.Object) (*Workspace, error) {
-	workspace, ok := obj.(*Workspace)
+func expectWorkspace(obj runtime.Object) (*pwv1alpha1.Workspace, error) {
+	workspace, ok := obj.(*pwv1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace but got a %T", obj)
 	}
 	return workspace, nil
 }
 
-func (v *WorkspaceWebhook) ensureValidRole(ctx context.Context, workspace *Workspace) (bool, error) {
+func (v *WorkspaceWebhook) ensureValidRole(ctx context.Context, workspace *pwv1alpha1.Workspace) (bool, error) {
 	userInfo, err := userInfoFromContext(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to get userInfo")
 	}
-	if workspace.UserInfoHasRole(userInfo, WorkspaceRoleAdmin) || userInfo.Username == v.Identity {
+	if workspace.UserInfoHasRole(userInfo, pwv1alpha1.WorkspaceRoleAdmin) || userInfo.Username == v.Identity {
 		return true, nil
 	}
 
-	if v.OverrideName == "" {
-		return false, nil
-	}
-
-	overrides := &MemberOverrides{}
-	if err := v.Get(ctx, types.NamespacedName{Name: v.OverrideName}, overrides); err != nil {
-		return false, err
+	overrides, err := v.SharedInformation.MemberOverrides(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get member overrides: %w", err)
 	}
 
 	if !overrides.HasAdminOverrideForResource(&userInfo, workspace.Name, workspace.Kind) {
@@ -179,7 +177,7 @@ func (v *WorkspaceWebhook) ensureValidRole(ctx context.Context, workspace *Works
 		return false, fmt.Errorf("failed to get Workspace Project name")
 	}
 
-	projectGVK := GroupVersion.WithKind("Project")
+	projectGVK := pwv1alpha1.GroupVersion.WithKind("Project")
 
 	// the subject must have admin access for the parent project as well.
 	if overrides.HasAdminOverrideForResource(&userInfo, projectName, projectGVK.Kind) {
