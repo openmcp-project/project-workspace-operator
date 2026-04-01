@@ -364,7 +364,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	// update the AccessRequests for the onboarding cluster to ensure that the project and workspace controllers have sufficient permissions to get the resources blocking deletion
 	log.Info("Updating AccessRequests to ensure project and workspace controllers have sufficient permissions to get deletion blocking resources")
 	permissionGroups := APIGroupsWithResourcesList{}
-	for _, res := range c.resourcesBlockingProjectDeletion {
+	for _, res := range c.resourcesBlockingProjectDeletionInternal() {
 		resourceName, err := c.discoverResourceNameForGVK(log, res.GroupVersionKind)
 		if err != nil {
 			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)
@@ -375,7 +375,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 		})
 
 	}
-	for _, res := range c.resourcesBlockingWorkspaceDeletion {
+	for _, res := range c.resourcesBlockingWorkspaceDeletionInternal() {
 		resourceName, err := c.discoverResourceNameForGVK(log, res.GroupVersionKind)
 		if err != nil {
 			return cfg, reconcile.Result{}, fmt.Errorf("error determining resource name for kind '%s' with apiVersion '%s/%s': %w", res.Kind, res.Group, res.Version, err)

@@ -23,6 +23,7 @@ import (
 	testutils "github.com/openmcp-project/controller-utils/pkg/testing"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	openmcpcorev2alpha1 "github.com/openmcp-project/openmcp-operator/api/core/v2alpha1"
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
@@ -42,6 +43,50 @@ const (
 
 var onboardingScheme = install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 var platformScheme = install.InstallOperatorAPIsPlatform(runtime.NewScheme())
+
+// This is for the builtin deletion blocking resources
+var alwaysKnownAPIResources = []*metav1.APIResourceList{
+	{
+		GroupVersion: pwov1alpha1.GroupVersion.String(),
+		APIResources: []metav1.APIResource{
+			{
+				Name:       "workspaces",
+				Group:      pwov1alpha1.GroupVersion.Group,
+				Version:    pwov1alpha1.GroupVersion.Version,
+				Kind:       "Workspace",
+				Namespaced: true,
+			},
+		},
+	},
+	{
+		GroupVersion: openmcpcorev2alpha1.GroupVersion.String(),
+		APIResources: []metav1.APIResource{
+			{
+				Name:       "managedcontrolplanev2s",
+				Group:      openmcpcorev2alpha1.GroupVersion.Group,
+				Version:    openmcpcorev2alpha1.GroupVersion.Version,
+				Kind:       "ManagedControlPlaneV2",
+				Namespaced: true,
+			},
+		},
+	},
+}
+var alwaysExpectedDynamicAccessPermissions = []clustersv1alpha1.PermissionsRequest{
+	{
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"core.openmcp.cloud"},
+				Resources: []string{
+					"workspaces",
+					"workspaces/status",
+					"managedcontrolplanev2s",
+					"managedcontrolplanev2s/status",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		},
+	},
+}
 
 func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResourceList) (*sharedconfig.PWOConfigController, *testutils.ComplexEnvironment) {
 	envb := testutils.NewComplexEnvironmentBuilder().
@@ -91,6 +136,19 @@ func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResour
 			})
 			fd := fakeclientset.NewClientset().Discovery().(*fakediscovery.FakeDiscovery)
 			fd.Resources = knownAPIResources
+			for _, akrl := range alwaysKnownAPIResources {
+				found := false
+				for _, krl := range fd.Resources {
+					if krl.GroupVersion == akrl.GroupVersion {
+						krl.APIResources = append(krl.APIResources, akrl.APIResources...)
+						found = true
+						break
+					}
+				}
+				if !found {
+					fd.Resources = append(fd.Resources, akrl)
+				}
+			}
 			pwc.DiscoveryService = fd
 			return pwc
 		}, platformClusterID, onboardingClusterID).
@@ -148,7 +206,10 @@ func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc 
 	ar, err := pwc.Car.AccessRequest(env.Ctx, req, sharedconfig.ClusterIDOnboardingDynamic)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 	ExpectWithOffset(1, ar.Namespace).To(Equal(podNamespace))
-	ExpectWithOffset(1, ar.Spec.Token).To(Equal(expected.dynamicAccessPermissions), "dynamic access permissions do not match")
+	effectiveDynamicAccessPermissions := &clustersv1alpha1.TokenConfig{Permissions: []clustersv1alpha1.PermissionsRequest{}}
+	effectiveDynamicAccessPermissions.Permissions = append(effectiveDynamicAccessPermissions.Permissions, alwaysExpectedDynamicAccessPermissions...)
+	effectiveDynamicAccessPermissions.Permissions = append(effectiveDynamicAccessPermissions.Permissions, expected.dynamicAccessPermissions.Permissions...)
+	ExpectWithOffset(1, ar.Spec.Token).To(Equal(effectiveDynamicAccessPermissions), "dynamic access permissions do not match")
 }
 
 func (exp *expectedValues) clone() *expectedValues {
