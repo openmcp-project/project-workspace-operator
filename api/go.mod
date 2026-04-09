@@ -1,6 +1,6 @@
 module github.com/openmcp-project/project-workspace-operator/api
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/openmcp-project/controller-utils v0.27.0
