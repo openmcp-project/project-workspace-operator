@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +32,7 @@ import (
 	pwov1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/install"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
 )
 
 const (
@@ -125,7 +128,7 @@ func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResour
 		}).
 		WithDynamicObjectsWithStatus(platformClusterID, &clustersv1alpha1.AccessRequest{}).
 		WithReconcilerConstructor(pwcRec, func(c ...client.Client) reconcile.Reconciler {
-			pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace)
+			pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace, nil)
 			Expect(err).ToNot(HaveOccurred(), "failed to create PWOConfigController")
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestReadiness, advanced.FakeAccessRequestReadiness())
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestDeletion, advanced.FakeAccessRequestDeletion([]string{"clusterprovider"}, nil))
@@ -756,6 +759,116 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 		delete(cfg.Spec.Workspace.AdditionalPermissions, pwov1alpha1.WorkspaceRoleView)
 		Expect(env.Client(platformClusterID).Update(env.Ctx, cfg)).To(Succeed())
 		originallyExpected.validate(env, pwc)
+	})
+
+	It("should update workspace ClusterRoles on the onboarding cluster when a ServiceProvider is added or removed", func() {
+		testDirPath := filepath.Join("testdata", "test-05")
+		fooAPIResources := &metav1.APIResourceList{
+			GroupVersion: "foo.services.openmcp.cloud/v1alpha1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "foos",
+					Group:      "foo.services.openmcp.cloud",
+					Version:    "v1alpha1",
+					Kind:       "Foo",
+					Namespaced: true,
+				},
+			},
+		}
+		knownAPIResources := []*metav1.APIResourceList{fooAPIResources}
+
+		// Build the environment with an RBACSetup wired in
+		envb := testutils.NewComplexEnvironmentBuilder().
+			WithFakeClient(platformClusterID, platformScheme).
+			WithFakeClient(onboardingClusterID, onboardingScheme)
+		platformDirPath := filepath.Join(testDirPath, "platform")
+		if pdi, err := os.Stat(platformDirPath); err == nil && pdi.IsDir() {
+			envb = envb.WithInitObjectPath(platformClusterID, platformDirPath)
+		}
+		env := envb.
+			WithInitObjects(platformClusterID, &clustersv1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "onboarding",
+					Namespace: "default",
+				},
+			}).
+			WithDynamicObjectsWithStatus(platformClusterID, &clustersv1alpha1.AccessRequest{}).
+			WithReconcilerConstructor(pwcRec, func(c ...client.Client) reconcile.Reconciler {
+				onboardingClient := c[1]
+				rbacSetup := core.NewRBACSetup(logr.Discard(), onboardingClient, core.ControllerName, pwov1alpha1.ProjectWorkspaceConfigSpec{})
+
+				pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, onboardingClient), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace, rbacSetup)
+				Expect(err).ToNot(HaveOccurred(), "failed to create PWOConfigController")
+				pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestReadiness, advanced.FakeAccessRequestReadiness())
+				pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestDeletion, advanced.FakeAccessRequestDeletion([]string{"clusterprovider"}, nil))
+				pwc.Car.WithFakeClientGenerator(func(ctx context.Context, kcfgData []byte, scheme *runtime.Scheme, additionalData ...any) (client.Client, error) {
+					return pwc.OnboardingClusterAccessStatic.Client(), nil
+				})
+				fd := fakeclientset.NewClientset().Discovery().(*fakediscovery.FakeDiscovery)
+				fd.Resources = knownAPIResources
+				for _, akrl := range alwaysKnownAPIResources {
+					found := false
+					for _, krl := range fd.Resources {
+						if krl.GroupVersion == akrl.GroupVersion {
+							krl.APIResources = append(krl.APIResources, akrl.APIResources...)
+							found = true
+							break
+						}
+					}
+					if !found {
+						fd.Resources = append(fd.Resources, akrl)
+					}
+				}
+				pwc.DiscoveryService = fd
+				return pwc
+			}, platformClusterID, onboardingClusterID).
+			Build()
+
+		req := testutils.RequestFromStrings(providerName)
+		EventuallyWithOffset(1, env.ShouldReconcile).WithArguments(pwcRec, req).Should(WithTransform(func(rr reconcile.Result) time.Duration { return rr.RequeueAfter }, BeZero()))
+
+		// After reconciliation, the workspace ClusterRoles on the onboarding cluster should contain
+		// the dynamic rules derived from the Foo ServiceProvider.
+		adminCR := &rbacv1.ClusterRole{}
+		err := env.Client(onboardingClusterID).Get(env.Ctx, types.NamespacedName{Name: "workspace-admin"}, adminCR)
+		Expect(err).ToNot(HaveOccurred(), "workspace-admin ClusterRole should exist on onboarding cluster")
+		Expect(adminCR.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"foo.services.openmcp.cloud"},
+			Resources: []string{"foos"},
+			Verbs:     []string{"*"},
+		}), "workspace-admin ClusterRole should contain dynamic Foo rule")
+
+		viewCR := &rbacv1.ClusterRole{}
+		err = env.Client(onboardingClusterID).Get(env.Ctx, types.NamespacedName{Name: "workspace-view"}, viewCR)
+		Expect(err).ToNot(HaveOccurred(), "workspace-view ClusterRole should exist on onboarding cluster")
+		Expect(viewCR.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"foo.services.openmcp.cloud"},
+			Resources: []string{"foos"},
+			Verbs:     []string{"get", "list", "watch"},
+		}), "workspace-view ClusterRole should contain dynamic Foo rule")
+
+		// Now delete the ServiceProvider and verify the rules are removed
+		sp := &providerv1alpha1.ServiceProvider{}
+		sp.Name = "foo"
+		Expect(env.Client(platformClusterID).Delete(env.Ctx, sp)).To(Succeed())
+
+		EventuallyWithOffset(1, env.ShouldReconcile).WithArguments(pwcRec, req).Should(WithTransform(func(rr reconcile.Result) time.Duration { return rr.RequeueAfter }, BeZero()))
+
+		err = env.Client(onboardingClusterID).Get(env.Ctx, types.NamespacedName{Name: "workspace-admin"}, adminCR)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(adminCR.Rules).ToNot(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"foo.services.openmcp.cloud"},
+			Resources: []string{"foos"},
+			Verbs:     []string{"*"},
+		}), "workspace-admin ClusterRole should no longer contain Foo rule after ServiceProvider deletion")
+
+		err = env.Client(onboardingClusterID).Get(env.Ctx, types.NamespacedName{Name: "workspace-view"}, viewCR)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(viewCR.Rules).ToNot(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"foo.services.openmcp.cloud"},
+			Resources: []string{"foos"},
+			Verbs:     []string{"get", "list", "watch"},
+		}), "workspace-view ClusterRole should no longer contain Foo rule after ServiceProvider deletion")
 	})
 
 })

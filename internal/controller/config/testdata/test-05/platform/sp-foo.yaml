@@ -1,0 +1,13 @@
+apiVersion: openmcp.cloud/v1alpha1
+kind: ServiceProvider
+metadata:
+  name: foo
+spec:
+  image: foo:latest
+status:
+  observedGeneration: 1
+  phase: Ready
+  resources:
+  - group: foo.services.openmcp.cloud
+    kind: Foo
+    version: v1alpha1

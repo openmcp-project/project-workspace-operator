@@ -60,6 +60,10 @@ func (setup *RBACSetup) EnsureResources(ctx context.Context) error {
 }
 
 func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) error {
+	return setup.CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx, nil)
+}
+
+func (setup *RBACSetup) CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx context.Context, dynamicRules map[string][]rbacv1.PolicyRule) error {
 	projectRoles := map[pwv1alpha1.ProjectMemberRole][]string{
 		pwv1alpha1.ProjectRoleAdmin: AllVerbs,
 		pwv1alpha1.ProjectRoleView:  ReadOnlyVerbs,
@@ -109,6 +113,18 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 			// add roles from config, if defined
 			clusterRole.Rules = append(clusterRole.Rules, setup.config.Project.AdditionalPermissions[role]...)
 
+			// append dynamic rules derived from ServiceProviders
+			var roleID string
+			switch role {
+			case pwv1alpha1.ProjectRoleAdmin:
+				roleID = "admin"
+			case pwv1alpha1.ProjectRoleView:
+				roleID = "viewer"
+			}
+			if dynRules, ok := dynamicRules[roleID]; ok {
+				clusterRole.Rules = append(clusterRole.Rules, dynRules...)
+			}
+
 			return nil
 		})
 		if err != nil {
@@ -121,6 +137,10 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context) e
 }
 
 func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context) error {
+	return setup.CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx, nil)
+}
+
+func (setup *RBACSetup) CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx context.Context, dynamicRules map[string][]rbacv1.PolicyRule) error {
 	workspaceRoles := map[pwv1alpha1.WorkspaceMemberRole][]string{
 		pwv1alpha1.WorkspaceRoleAdmin: AllVerbs,
 		pwv1alpha1.WorkspaceRoleView:  ReadOnlyVerbs,
@@ -173,6 +193,18 @@ func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context)
 
 			// add roles from config, if defined
 			clusterRole.Rules = append(clusterRole.Rules, setup.config.Workspace.AdditionalPermissions[role]...)
+
+			// append dynamic rules derived from ServiceProviders
+			var roleID string
+			switch role {
+			case pwv1alpha1.WorkspaceRoleAdmin:
+				roleID = "admin"
+			case pwv1alpha1.WorkspaceRoleView:
+				roleID = "viewer"
+			}
+			if dynRules, ok := dynamicRules[roleID]; ok {
+				clusterRole.Rules = append(clusterRole.Rules, dynRules...)
+			}
 
 			return nil
 		})

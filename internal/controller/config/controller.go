@@ -46,6 +46,14 @@ const (
 	ClusterIDOnboardingDynamic = "onboarding-dynamic"
 )
 
+// ClusterRoleUpdater is implemented by core.RBACSetup and allows the config controller to
+// update the workspace/project ClusterRoles on the onboarding cluster whenever the set of
+// registered ServiceProviders changes, without creating an import cycle.
+type ClusterRoleUpdater interface {
+	CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx context.Context, dynamicRules map[string][]rbacv1.PolicyRule) error
+	CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx context.Context, dynamicRules map[string][]rbacv1.PolicyRule) error
+}
+
 var (
 	BuiltinResourcesBlockingProjectDeletion = []DeletionBlockingResource{
 		{
@@ -90,6 +98,7 @@ type PWOConfigController struct {
 	rec                           record.EventRecorder
 	OnboardingClusterAccessStatic *clusters.Cluster
 	DiscoveryService              discovery.DiscoveryInterface
+	rbacSetup                     ClusterRoleUpdater // used to update ClusterRoles when ServiceProviders change
 
 	// The lock needs to be held when reading or writing any of the fields below.
 	lock                               *sync.RWMutex
@@ -149,7 +158,7 @@ func (l APIGroupsWithResourcesList) Append(elems ...APIGroupsWithResources) APIG
 // - It reconciles the OnboardingCluster AccessRequests for the project and workspace controllers to ensure they can always fetch the the resources that are supposed to block deletion.
 //
 // Note that this is a pure v2 controller. It does neither work for v1, nor is it required, because in v1 all of this information is statically read from a file.
-func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder, podNamespace string) (*PWOConfigController, error) {
+func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder, podNamespace string, rbacSetup ClusterRoleUpdater) (*PWOConfigController, error) {
 	scheme := install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 	obRef := advanced.StaticReferenceGenerator(onboardingClusterRef)
 	var ds discovery.DiscoveryInterface
@@ -165,6 +174,7 @@ func NewPWOConfigController(providerName string, platformCluster *clusters.Clust
 		platformCluster:               platformCluster,
 		OnboardingClusterAccessStatic: onboardingClusterStatic,
 		DiscoveryService:              ds,
+		rbacSetup:                     rbacSetup,
 		Car: advanced.NewClusterAccessReconciler(platformCluster.Client(), ControllerName).
 			Register(advanced.ExistingCluster(ClusterIDOnboardingDynamic, "obdyn", obRef).WithScheme(scheme).WithNamespaceGenerator(func(_ reconcile.Request, _ ...any) (string, error) { return podNamespace, nil }).Build()),
 		rec:                                rec,
@@ -459,6 +469,39 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 					log.Debug(fmt.Sprintf("%s permissions for role '%s'", k, roleID), "permissions", string(permBytes))
 				}
 			}
+		}
+	}
+
+	// Re-reconcile the global workspace and project ClusterRoles on the onboarding cluster
+	// to pick up resources advertised by newly registered (or removed) ServiceProviders.
+	if c.rbacSetup != nil {
+		workspaceDynamicRules := map[string][]rbacv1.PolicyRule{}
+		for _, roleID := range []string{AdminRole, ViewerRole} {
+			rules, err := c.workspacePermissionsForRoleInternal(roleID)
+			if err != nil {
+				return cfg, reconcile.Result{}, fmt.Errorf("failed to compute workspace permissions for role %s: %w", roleID, err)
+			}
+			workspaceDynamicRules[roleID] = rules
+		}
+		if err := c.rbacSetup.CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx, workspaceDynamicRules); err != nil {
+			return cfg, reconcile.Result{}, fmt.Errorf("failed to update workspace ClusterRoles after ServiceProvider change: %w", err)
+		}
+		apiGroups := make([]string, 0, len(c.permissibleWorkspaceResources))
+		for _, agr := range c.permissibleWorkspaceResources {
+			apiGroups = append(apiGroups, agr.APIGroups...)
+		}
+		log.Info("Updated workspace ClusterRoles from ServiceProvider resources", "apiGroups", apiGroups)
+
+		projectDynamicRules := map[string][]rbacv1.PolicyRule{}
+		for _, roleID := range []string{AdminRole, ViewerRole} {
+			rules, err := c.projectPermissionsForRoleInternal(roleID)
+			if err != nil {
+				return cfg, reconcile.Result{}, fmt.Errorf("failed to compute project permissions for role %s: %w", roleID, err)
+			}
+			projectDynamicRules[roleID] = rules
+		}
+		if err := c.rbacSetup.CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx, projectDynamicRules); err != nil {
+			return cfg, reconcile.Result{}, fmt.Errorf("failed to update project ClusterRoles after ServiceProvider change: %w", err)
 		}
 	}
 

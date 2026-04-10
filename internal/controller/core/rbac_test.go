@@ -201,3 +201,135 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 		})
 	}
 }
+
+func TestRBACSetup_CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(t *testing.T) {
+	ctx := context.TODO()
+	c := fake.NewClientBuilder().Build()
+	s := NewRBACSetup(testr.New(t), c, "test-rbac-controller", pwv1alpha1.ProjectWorkspaceConfigSpec{})
+
+	dynamicRules := map[string][]rbacv1.PolicyRule{
+		"admin": {
+			{
+				APIGroups: []string{"foo.services.openmcp.cloud"},
+				Resources: []string{"foos"},
+				Verbs:     []string{"*"},
+			},
+		},
+		"viewer": {
+			{
+				APIGroups: []string{"foo.services.openmcp.cloud"},
+				Resources: []string{"foos"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+
+	err := s.CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx, dynamicRules)
+	assert.NoError(t, err)
+
+	// Verify admin ClusterRole contains the dynamic rule
+	adminCR := &rbacv1.ClusterRole{}
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleAdmin)}, adminCR)
+	assert.NoError(t, err)
+	assert.Contains(t, adminCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"foo.services.openmcp.cloud"},
+		Resources: []string{"foos"},
+		Verbs:     []string{"*"},
+	})
+
+	// Verify viewer ClusterRole contains the dynamic rule
+	viewerCR := &rbacv1.ClusterRole{}
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleView)}, viewerCR)
+	assert.NoError(t, err)
+	assert.Contains(t, viewerCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"foo.services.openmcp.cloud"},
+		Resources: []string{"foos"},
+		Verbs:     []string{"get", "list", "watch"},
+	})
+
+	// Verify that calling with nil dynamic rules removes the dynamic rules
+	err = s.CreateOrUpdateWorkspaceClusterRolesWithDynamicRules(ctx, nil)
+	assert.NoError(t, err)
+
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleAdmin)}, adminCR)
+	assert.NoError(t, err)
+	assert.NotContains(t, adminCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"foo.services.openmcp.cloud"},
+		Resources: []string{"foos"},
+		Verbs:     []string{"*"},
+	})
+
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.WorkspaceRoleView)}, viewerCR)
+	assert.NoError(t, err)
+	assert.NotContains(t, viewerCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"foo.services.openmcp.cloud"},
+		Resources: []string{"foos"},
+		Verbs:     []string{"get", "list", "watch"},
+	})
+}
+
+func TestRBACSetup_CreateOrUpdateProjectClusterRolesWithDynamicRules(t *testing.T) {
+	ctx := context.TODO()
+	c := fake.NewClientBuilder().Build()
+	s := NewRBACSetup(testr.New(t), c, "test-rbac-controller", pwv1alpha1.ProjectWorkspaceConfigSpec{})
+
+	dynamicRules := map[string][]rbacv1.PolicyRule{
+		"admin": {
+			{
+				APIGroups: []string{"custom.example.com"},
+				Resources: []string{"myresources"},
+				Verbs:     []string{"*"},
+			},
+		},
+		"viewer": {
+			{
+				APIGroups: []string{"custom.example.com"},
+				Resources: []string{"myresources"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+
+	err := s.CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx, dynamicRules)
+	assert.NoError(t, err)
+
+	// Verify admin ClusterRole contains the dynamic rule
+	adminCR := &rbacv1.ClusterRole{}
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleAdmin)}, adminCR)
+	assert.NoError(t, err)
+	assert.Contains(t, adminCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"custom.example.com"},
+		Resources: []string{"myresources"},
+		Verbs:     []string{"*"},
+	})
+
+	// Verify viewer ClusterRole contains the dynamic rule
+	viewerCR := &rbacv1.ClusterRole{}
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleView)}, viewerCR)
+	assert.NoError(t, err)
+	assert.Contains(t, viewerCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"custom.example.com"},
+		Resources: []string{"myresources"},
+		Verbs:     []string{"get", "list", "watch"},
+	})
+
+	// Verify that calling with nil dynamic rules removes the dynamic rules
+	err = s.CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx, nil)
+	assert.NoError(t, err)
+
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleAdmin)}, adminCR)
+	assert.NoError(t, err)
+	assert.NotContains(t, adminCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"custom.example.com"},
+		Resources: []string{"myresources"},
+		Verbs:     []string{"*"},
+	})
+
+	err = c.Get(ctx, types.NamespacedName{Name: clusterRoleForRole(pwv1alpha1.ProjectRoleView)}, viewerCR)
+	assert.NoError(t, err)
+	assert.NotContains(t, viewerCR.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"custom.example.com"},
+		Resources: []string{"myresources"},
+		Verbs:     []string{"get", "list", "watch"},
+	})
+}
