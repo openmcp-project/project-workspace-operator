@@ -114,15 +114,17 @@ func (setup *RBACSetup) CreateOrUpdateProjectClusterRolesWithDynamicRules(ctx co
 			clusterRole.Rules = append(clusterRole.Rules, setup.config.Project.AdditionalPermissions[role]...)
 
 			// append dynamic rules derived from ServiceProviders
-			var roleID string
-			switch role {
-			case pwv1alpha1.ProjectRoleAdmin:
-				roleID = "admin"
-			case pwv1alpha1.ProjectRoleView:
-				roleID = "viewer"
-			}
-			if dynRules, ok := dynamicRules[roleID]; ok {
-				clusterRole.Rules = append(clusterRole.Rules, dynRules...)
+			if dynamicRules != nil {
+				var roleID string
+				switch role {
+				case pwv1alpha1.ProjectRoleAdmin:
+					roleID = "admin"
+				case pwv1alpha1.ProjectRoleView:
+					roleID = "viewer"
+				}
+				if dynRules, ok := dynamicRules[roleID]; ok {
+					clusterRole.Rules = append(clusterRole.Rules, dynRules...)
+				}
 			}
 
 			return nil
