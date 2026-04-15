@@ -111,7 +111,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",
@@ -170,7 +170,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind:      "ServiceAccount",
@@ -230,7 +230,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "Group",
@@ -289,7 +289,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",
@@ -383,7 +383,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = k8sClient.Create(ctx, namespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",
@@ -428,7 +428,7 @@ var _ = Describe("Workspace Webhook", func() {
 			err = realUserClient.Create(ctx, workspace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",

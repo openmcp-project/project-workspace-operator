@@ -398,13 +398,13 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 	return cfg, reconcile.Result{}, nil
 }
 
-func (c *PWOConfigController) MemberOverrides(ctx context.Context) (pwv1alpha1.MemberOverridesV2, error) {
+func (c *PWOConfigController) MemberOverrides(ctx context.Context) (pwv1alpha1.MemberOverrides, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	if c.missingConfig {
 		return nil, fmt.Errorf("ProjectWorkspaceConfig is missing")
 	}
-	res := make(pwv1alpha1.MemberOverridesV2, len(c.memberOverrides))
+	res := make(pwv1alpha1.MemberOverrides, len(c.memberOverrides))
 	copy(res, c.memberOverrides)
 	return res, nil
 }

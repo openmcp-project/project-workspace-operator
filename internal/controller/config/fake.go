@@ -10,7 +10,7 @@ import (
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
-func NewFakeSharedInformation(onboardingClient client.Client, resourcesBlockingProjectDeletion []DeletionBlockingResource, resourcesBlockingWorkspaceDeletion []DeletionBlockingResource, memberOverrides pwv1alpha1.MemberOverridesV2) *FakeSharedInformation {
+func NewFakeSharedInformation(onboardingClient client.Client, resourcesBlockingProjectDeletion []DeletionBlockingResource, resourcesBlockingWorkspaceDeletion []DeletionBlockingResource, memberOverrides pwv1alpha1.MemberOverrides) *FakeSharedInformation {
 	return &FakeSharedInformation{
 		OnboardingCluster:                      clusters.NewTestClusterFromClient("onboarding", onboardingClient),
 		ResourcesBlockingProjectDeletionData:   resourcesBlockingProjectDeletion,
@@ -25,13 +25,13 @@ type FakeSharedInformation struct {
 	OnboardingCluster                      *clusters.Cluster
 	ResourcesBlockingProjectDeletionData   []DeletionBlockingResource
 	ResourcesBlockingWorkspaceDeletionData []DeletionBlockingResource
-	MemberOverridesData                    pwv1alpha1.MemberOverridesV2
+	MemberOverridesData                    pwv1alpha1.MemberOverrides
 }
 
 var _ SharedInformation = &FakeSharedInformation{}
 
 // MemberOverrides implements SharedInformation.
-func (f *FakeSharedInformation) MemberOverrides(ctx context.Context) (pwv1alpha1.MemberOverridesV2, error) {
+func (f *FakeSharedInformation) MemberOverrides(ctx context.Context) (pwv1alpha1.MemberOverrides, error) {
 	if f == nil {
 		return nil, nil
 	}

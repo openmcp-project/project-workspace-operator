@@ -38,7 +38,7 @@ type SharedInformation interface {
 	ResourcesBlockingWorkspaceDeletion(ctx context.Context) ([]DeletionBlockingResource, error)
 
 	// MemberOverrides returns the users and groups that should have admin permissions to projects and workspaces, bypassing the 'you must be admin of a project/workspace in order to modify it' check.
-	MemberOverrides(ctx context.Context) (pwov1alpha1.MemberOverridesV2, error)
+	MemberOverrides(ctx context.Context) (pwov1alpha1.MemberOverrides, error)
 
 	// OnboardingClusterStatic returns the static access to the onboarding cluster.
 	// It has permissions for namespaces, rbac resources, CRDs, and Project/Workspace resources.
