@@ -4,13 +4,6 @@ components:
   provider:
     name: ${PROVIDER}
   resources:
-    - name: ${COMPONENT_NAME}-chart
-      type: helmChart
-      input:
-        type: helm
-        path: ./charts/${COMPONENT_NAME}
-        repository: charts/${COMPONENT_NAME}
-      
     - name: ${COMPONENT_NAME}-image
       type: ociImage
       input:
