@@ -1,6 +1,0 @@
-apiVersion: v2
-name: project-workspace-operator
-description: A Helm chart for the project-workspace-operator
-type: application
-version: v1.4.0
-appVersion: v1.4.0

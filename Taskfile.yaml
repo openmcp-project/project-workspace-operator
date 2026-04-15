@@ -24,6 +24,7 @@ includes:
       CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
+      CHART_COMPONENTS: "[]"
 
 tasks:
   platformservice:
@@ -44,11 +45,29 @@ tasks:
         spec:
           image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
           verbosity: {{.VERBOSITY}}
-          initCommand:
-          - platformservice
-          - init
+        EOF
+      silent: true
+
+  platformservice-v1:
+    desc: "  Like 'platformservice', but includes v1 support."
+    requires:
+      vars:
+      - VERSION
+    vars:
+      VERBOSITY:
+        sh: echo "${VERBOSITY:-INFO}"
+    cmds:
+    - cmd: |
+        cat << EOF
+        apiVersion: openmcp.cloud/v1alpha1
+        kind: PlatformService
+        metadata:
+          name: project-workspace
+        spec:
+          image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
+          verbosity: {{.VERBOSITY}}
           runCommand:
-          - platformservice
           - run
+          - --v1
         EOF
       silent: true
