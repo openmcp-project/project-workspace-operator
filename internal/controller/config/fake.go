@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 
-	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
@@ -11,11 +10,9 @@ import (
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 )
 
-func NewFakeSharedInformation(onboardingClient client.Client, projectPermissionsByRole map[string][]rbacv1.PolicyRule, workspacePermissionsByRole map[string][]rbacv1.PolicyRule, resourcesBlockingProjectDeletion []DeletionBlockingResource, resourcesBlockingWorkspaceDeletion []DeletionBlockingResource, memberOverrides pwv1alpha1.MemberOverridesV2) *FakeSharedInformation {
+func NewFakeSharedInformation(onboardingClient client.Client, resourcesBlockingProjectDeletion []DeletionBlockingResource, resourcesBlockingWorkspaceDeletion []DeletionBlockingResource, memberOverrides pwv1alpha1.MemberOverridesV2) *FakeSharedInformation {
 	return &FakeSharedInformation{
 		OnboardingCluster:                      clusters.NewTestClusterFromClient("onboarding", onboardingClient),
-		ProjectPermissionsByRole:               projectPermissionsByRole,
-		WorkspacePermissionsByRole:             workspacePermissionsByRole,
 		ResourcesBlockingProjectDeletionData:   resourcesBlockingProjectDeletion,
 		ResourcesBlockingWorkspaceDeletionData: resourcesBlockingWorkspaceDeletion,
 		MemberOverridesData:                    memberOverrides,
@@ -26,8 +23,6 @@ func NewFakeSharedInformation(onboardingClient client.Client, projectPermissions
 // It is meant for unit tests and should not be used anywhere else.
 type FakeSharedInformation struct {
 	OnboardingCluster                      *clusters.Cluster
-	ProjectPermissionsByRole               map[string][]rbacv1.PolicyRule
-	WorkspacePermissionsByRole             map[string][]rbacv1.PolicyRule
 	ResourcesBlockingProjectDeletionData   []DeletionBlockingResource
 	ResourcesBlockingWorkspaceDeletionData []DeletionBlockingResource
 	MemberOverridesData                    pwv1alpha1.MemberOverridesV2
@@ -59,14 +54,6 @@ func (f *FakeSharedInformation) OnboardingClusterStatic(ctx context.Context) (*c
 	return f.OnboardingCluster, nil
 }
 
-// ProjectPermissionsForRole implements SharedInformation.
-func (f *FakeSharedInformation) ProjectPermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
-	if f == nil {
-		return nil, nil
-	}
-	return f.ProjectPermissionsByRole[roleID], nil
-}
-
 // ResourcesBlockingProjectDeletion implements SharedInformation.
 func (f *FakeSharedInformation) ResourcesBlockingProjectDeletion(ctx context.Context) ([]DeletionBlockingResource, error) {
 	if f == nil {
@@ -81,12 +68,4 @@ func (f *FakeSharedInformation) ResourcesBlockingWorkspaceDeletion(ctx context.C
 		return nil, nil
 	}
 	return f.ResourcesBlockingWorkspaceDeletionData, nil
-}
-
-// WorkspacePermissionsForRole implements SharedInformation.
-func (f *FakeSharedInformation) WorkspacePermissionsForRole(ctx context.Context, roleID string) ([]rbacv1.PolicyRule, error) {
-	if f == nil {
-		return nil, nil
-	}
-	return f.WorkspacePermissionsByRole[roleID], nil
 }

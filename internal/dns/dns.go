@@ -9,7 +9,6 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/collections/filters"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/utils/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -142,7 +141,7 @@ func (r *Reconciler) ReconcileTLSRoute(ctx context.Context, instance *Instance, 
 				ParentRefs: []gatewayv1alpha2.ParentReference{
 					{
 						Name:      gatewayv1.ObjectName(gateway.Name),
-						Namespace: ptr.To(gatewayv1.Namespace(gateway.Namespace)),
+						Namespace: new(gatewayv1.Namespace(gateway.Namespace)),
 					},
 				},
 			},
@@ -155,7 +154,7 @@ func (r *Reconciler) ReconcileTLSRoute(ctx context.Context, instance *Instance, 
 						{
 							BackendObjectReference: gatewayv1alpha2.BackendObjectReference{
 								Name: gatewayv1.ObjectName(instance.BackendName),
-								Port: ptr.To(instance.BackendPort),
+								Port: new(instance.BackendPort),
 							},
 						},
 					},

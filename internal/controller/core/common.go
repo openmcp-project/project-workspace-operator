@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/util/json"
 
@@ -18,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/api/entities"
 	"github.com/openmcp-project/project-workspace-operator/api/install"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
 var (
@@ -29,7 +28,7 @@ var (
 
 	deleteFinalizer = pwv1alpha1.GroupVersion.Group
 
-	ControllerName = "project-workspace-operator"
+	ControllerName = "project-workspace"
 )
 
 func init() {
@@ -37,8 +36,8 @@ func init() {
 }
 
 type CommonReconciler struct {
-	Config         sharedconfig.SharedInformation
-	ControllerName string
+	Config       sharedconfig.SharedInformation
+	ProviderName string
 }
 
 func (r *CommonReconciler) ensureFinalizer(ctx context.Context, o client.Object) error {
@@ -57,7 +56,7 @@ func (r *CommonReconciler) ensureFinalizer(ctx context.Context, o client.Object)
 }
 
 func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Context, o client.Object) (bool, error) {
-	if !wasDeleted(o) {
+	if !utils.WasDeleted(o) {
 		return false, nil
 	}
 
@@ -162,7 +161,7 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 	return false, nil
 }
 func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, deleteFunc func() error) (bool, ctrl.Result, error) {
-	if !wasDeleted(o) {
+	if !utils.WasDeleted(o) {
 		return false, reconcile.Result{}, nil
 	}
 
@@ -192,7 +191,7 @@ func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, de
 }
 
 func (r *CommonReconciler) applyManagementLabel(obj metav1.Object) {
-	setManagementLabel(obj, r.ControllerName)
+	utils.SetManagementLabels(obj, r.ProviderName)
 }
 
 var _ error = ResourcesRemainingError{}
@@ -205,38 +204,4 @@ func (err ResourcesRemainingError) Error() string {
 
 func (err ResourcesRemainingError) Is(target error) bool {
 	return reflect.TypeOf(target) == reflect.TypeOf(err)
-}
-
-func clusterRoleForEntityAndRole(entity entities.AccessEntity, role entities.AccessRole) string {
-	if reflect.TypeOf(entity) != reflect.TypeOf(role.EntityType()) {
-		panic("AccessEntity/AccessRole mismatch")
-	}
-	return strings.Join([]string{
-		entity.TypeIdentifier(),
-		entity.GetName(),
-		role.Identifier(),
-	}, ":")
-}
-
-func clusterRoleForRole(role entities.AccessRole) string {
-	return strings.Join([]string{
-		role.EntityType().TypeIdentifier(),
-		role.Identifier(),
-	}, "-")
-}
-
-func roleBindingForRole(role entities.AccessRole) string {
-	// Name of RoleBinding (namespaced) should be the same as ClusterRole.
-	return clusterRoleForRole(role)
-}
-
-func clusterRoleForEntityAndRoleWithParent(entity entities.AccessEntity, role entities.AccessRole, parent entities.AccessEntity) string {
-	if reflect.TypeOf(entity) == reflect.TypeOf(parent) {
-		panic("AccessEntity/Parent must not be of same type")
-	}
-	return strings.Join([]string{
-		parent.TypeIdentifier(),
-		parent.GetName(),
-		clusterRoleForEntityAndRole(entity, role),
-	}, ":")
 }

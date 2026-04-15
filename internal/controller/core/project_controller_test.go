@@ -24,6 +24,7 @@ import (
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
 const (
@@ -243,7 +244,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 			req := newRequest(tC.initObjs[0])
 
 			sr, err := NewProjectReconciler(c.Scheme(), &CommonReconciler{
-				Config: sharedconfig.NewFakeSharedInformation(c, nil, nil, []sharedconfig.DeletionBlockingResource{
+				Config: sharedconfig.NewFakeSharedInformation(c, []sharedconfig.DeletionBlockingResource{
 					{
 						GroupVersionKind: metav1.GroupVersionKind{
 							Group:   "",
@@ -253,7 +254,7 @@ func Test_ProjectReconciler_Reconcile(t *testing.T) {
 						Source: pwv1alpha1.SourceProjectWorkspaceConfig,
 					},
 				}, nil, nil),
-				ControllerName: "test",
+				ProviderName: "test",
 			},
 			)
 			assert.NoError(t, err)
@@ -293,7 +294,7 @@ func namespaceCreatedForProject(t *testing.T, ctx context.Context, c client.Clie
 	err := c.Get(ctx, types.NamespacedName{Name: p.Status.Namespace}, ns)
 	if expectation {
 		assert.NoError(t, err)
-		assert.Equal(t, p.Name, ns.Labels[labelProject])
+		assert.Equal(t, p.Name, ns.Labels[utils.LabelProject])
 	} else {
 		assert.True(t, apierrors.IsNotFound(err))
 	}
@@ -302,7 +303,7 @@ func namespaceCreatedForProject(t *testing.T, ctx context.Context, c client.Clie
 
 func clusterRoleCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedRules int) {
 	cr := &rbacv1.ClusterRole{}
-	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRole(p, role)}, cr)
+	err := c.Get(ctx, types.NamespacedName{Name: utils.ClusterRoleForEntityAndRole(p, role)}, cr)
 	if expectation {
 		assert.NoError(t, err)
 		assert.Len(t, cr.Rules, expectedRules)
@@ -316,7 +317,7 @@ func clusterRoleCreatedForProject(t *testing.T, ctx context.Context, c client.Cl
 
 func clusterRoleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	crb := &rbacv1.ClusterRoleBinding{}
-	err := c.Get(ctx, types.NamespacedName{Name: clusterRoleForEntityAndRole(p, role)}, crb)
+	err := c.Get(ctx, types.NamespacedName{Name: utils.ClusterRoleForEntityAndRole(p, role)}, crb)
 	if expectation {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedSubjects, crb.Subjects)
@@ -330,7 +331,7 @@ func clusterRoleBindingCreatedForProject(t *testing.T, ctx context.Context, c cl
 
 func roleBindingCreatedForProject(t *testing.T, ctx context.Context, c client.Client, p *pwv1alpha1.Project, role pwv1alpha1.ProjectMemberRole, expectation bool, expectedSubjects []rbacv1.Subject) {
 	rb := &rbacv1.RoleBinding{}
-	err := c.Get(ctx, types.NamespacedName{Name: roleBindingForRole(role), Namespace: p.Status.Namespace}, rb)
+	err := c.Get(ctx, types.NamespacedName{Name: utils.RoleBindingForRole(role), Namespace: p.Status.Namespace}, rb)
 	if expectation {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedSubjects, rb.Subjects)

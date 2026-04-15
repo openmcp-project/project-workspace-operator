@@ -104,6 +104,8 @@ func (o *RunOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.MetricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
 	cmd.Flags().StringVar(&o.MetricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	cmd.Flags().BoolVar(&o.EnableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+
+	cmd.Flags().BoolVar(&sharedconfig.SupportV1, "v1", false, "If set, the permissions for v1 resources (ManagedControlPlane, ClusterAdmin) are granted to users within workspace namespaces and they can also block workspace deletion.")
 }
 
 func (o *RunOptions) Complete(ctx context.Context) error {
@@ -307,12 +309,6 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to add platform cluster to manager: %w", err)
 	}
 
-	rbacSetup := core.NewRBACSetup(setupLog.Logr(), onboardingCluster.Client(), core.ControllerName, pwc.Spec)
-	if err := rbacSetup.EnsureResources(ctx); err != nil {
-		setupLog.Error(err, "unable to create or update RBAC resources")
-		os.Exit(1)
-	}
-
 	cr, err := clusterAccessManager.ClusterRequest(ctx, clustersv1alpha1.PURPOSE_ONBOARDING)
 	if err != nil {
 		return fmt.Errorf("unable to get cluster request for onboarding cluster: %w", err)
@@ -336,8 +332,8 @@ func (o *RunOptions) Run(ctx context.Context) error {
 	}
 
 	commonReconciler := &core.CommonReconciler{
-		ControllerName: core.ControllerName,
-		Config:         cfgCtrl,
+		ProviderName: o.ProviderName,
+		Config:       cfgCtrl,
 	}
 
 	pr, err := core.NewProjectReconciler(mgr.GetScheme(), commonReconciler)

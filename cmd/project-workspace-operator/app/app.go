@@ -21,7 +21,7 @@ const (
 
 func NewPlatformServiceProjectWorkspaceCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "platformservice <init|run>",
+		Use:     "platform-service-project-workspace",
 		Short:   "Handles projects and workspaces",
 		Aliases: []string{"ps"},
 	}

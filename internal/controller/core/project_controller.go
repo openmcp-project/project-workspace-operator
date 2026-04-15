@@ -12,11 +12,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/logging"
 
 	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
 // ProjectReconciler reconciles a Project object
@@ -50,7 +51,7 @@ func NewProjectReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*Projec
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := logging.FromContextOrPanic(ctx)
 
 	project := &v1alpha1.Project{}
 	if err := r.OnboardingStatic.Client().Get(ctx, req.NamespacedName, project); err != nil {
@@ -64,7 +65,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	projectNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespaceForProject(project),
+			Name: utils.NamespaceForProject(project),
 		},
 	}
 
@@ -111,14 +112,14 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	//
 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), projectNamespace, func() error {
-		setProjectLabel(projectNamespace, project.Name)
+		utils.SetProjectLabel(projectNamespace, project.Name)
 		r.applyManagementLabel(projectNamespace)
 		return nil
 	})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	logOperationResult(log, projectNamespace, result)
+	utils.LogOperationResult(log, projectNamespace, result)
 
 	project.Status.Namespace = projectNamespace.Name
 
@@ -147,11 +148,11 @@ func (r *ProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *ProjectReconciler) createOrUpdateRoleBinding(ctx context.Context, project *v1alpha1.Project, role v1alpha1.ProjectMemberRole) error {
-	log := log.FromContext(ctx)
+	log := logging.FromContextOrPanic(ctx)
 
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      roleBindingForRole(role),
+			Name:      utils.RoleBindingForRole(role),
 			Namespace: project.Status.Namespace,
 		},
 	}
@@ -163,12 +164,12 @@ func (r *ProjectReconciler) createOrUpdateRoleBinding(ctx context.Context, proje
 		roleBinding.RoleRef = rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "ClusterRole",
-			Name:     clusterRoleForRole(role),
+			Name:     utils.ClusterRoleForRole(role),
 		}
 
 		return controllerutil.SetOwnerReference(project, roleBinding, r.Scheme)
 	})
-	logOperationResult(log, roleBinding, result)
+	utils.LogOperationResult(log, roleBinding, result)
 	return err
 }
 
@@ -195,17 +196,17 @@ func hasProjectRole(member v1alpha1.ProjectMember, role v1alpha1.ProjectMemberRo
 }
 
 func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, project *v1alpha1.Project) error {
-	log := log.FromContext(ctx)
+	log := logging.FromContextOrPanic(ctx)
 
 	projectRoles := map[v1alpha1.ProjectMemberRole][]string{
-		v1alpha1.ProjectRoleAdmin: AllVerbs,
-		v1alpha1.ProjectRoleView:  ReadOnlyVerbs,
+		v1alpha1.ProjectRoleAdmin: utils.AllVerbs(),
+		v1alpha1.ProjectRoleView:  utils.ReadOnlyVerbs(),
 	}
 
 	for role, verbs := range projectRoles {
 		clusterRole := &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRole(project, role),
+				Name: utils.ClusterRoleForEntityAndRole(project, role),
 			},
 		}
 
@@ -233,11 +234,11 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		logOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, clusterRole, result)
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRole(project, role),
+				Name: utils.ClusterRoleForEntityAndRole(project, role),
 			},
 		}
 
@@ -257,7 +258,7 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		logOperationResult(log, clusterRoleBinding, result)
+		utils.LogOperationResult(log, clusterRoleBinding, result)
 	}
 
 	return nil
