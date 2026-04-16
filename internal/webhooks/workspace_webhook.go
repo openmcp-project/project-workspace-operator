@@ -8,15 +8,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/openmcp-project/controller-utils/pkg/logging"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
 
-// log is for logging in this package.
-var workspacelog = logf.Log.WithName("workspace-resource")
+const WorkspaceWebhookName = "workspace-webhook"
 
 // +kubebuilder:object:generate=false
 type WorkspaceWebhook struct {
@@ -68,11 +68,13 @@ var _ admission.Validator[*pwv1alpha1.Workspace] = &WorkspaceWebhook{}
 
 // ValidateCreate implements admission.Validator so a webhook will be registered for the type
 func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(WorkspaceWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return
 	}
-	workspacelog.Info("validate create", "name", workspace.Name)
+	log.Info("Validate create")
 
 	userInfo, err := userInfoFromContext(ctx)
 	if err != nil {
@@ -91,6 +93,8 @@ func (v *WorkspaceWebhook) ValidateCreate(ctx context.Context, obj *pwv1alpha1.W
 
 // ValidateUpdate implements admission.Validator so a webhook will be registered for the type
 func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(WorkspaceWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	oldWorkspace, err := expectWorkspace(oldObj)
 	if err != nil {
 		return
@@ -101,7 +105,7 @@ func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *p
 		return
 	}
 
-	workspacelog.Info("validate update", "name", oldWorkspace.Name)
+	log.Info("Validate update")
 
 	if err = verifyCreatedByUnchanged(oldWorkspace, newWorkspace); err != nil {
 		return
@@ -132,12 +136,14 @@ func (v *WorkspaceWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *p
 
 // ValidateDelete implements admission.Validator so a webhook will be registered for the type
 func (v *WorkspaceWebhook) ValidateDelete(ctx context.Context, obj *pwv1alpha1.Workspace) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(WorkspaceWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	workspace, err := expectWorkspace(obj)
 	if err != nil {
 		return
 	}
 
-	workspacelog.Info("validate delete", "name", workspace.Name)
+	log.Info("Validate delete")
 
 	if validRole, err := v.ensureValidRole(ctx, workspace); !validRole {
 		return warnings, err

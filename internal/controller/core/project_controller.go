@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -19,6 +20,8 @@ import (
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
+
+const ProjectControllerName = "project"
 
 // ProjectReconciler reconciles a Project object
 type ProjectReconciler struct {
@@ -51,6 +54,17 @@ func NewProjectReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*Projec
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logging.FromContextOrPanic(ctx).WithName(ProjectControllerName)
+	ctx = logging.NewContext(ctx, log)
+	log.Info("Reconcile started")
+	rr, err := r.reconcile(ctx, req)
+	if rr.RequeueAfter > 0 {
+		log.Debug("Requeuing request", "requeueAfter", rr.RequeueAfter, "nextReconciliationTime", time.Now().Add(rr.RequeueAfter))
+	}
+	return rr, err
+}
+
+func (r *ProjectReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logging.FromContextOrPanic(ctx)
 
 	project := &pwv1alpha1.Project{}

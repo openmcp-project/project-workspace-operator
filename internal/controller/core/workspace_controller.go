@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,8 +23,10 @@ import (
 	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
+const WorkspaceControllerName = "workspace"
+
 var (
-	ErrNamespaceHasNoLabels       = errors.New("namespace has no labels. Map is nil")
+	ErrNamespaceHasNoLabels       = errors.New("namespace has no labels, map is nil")
 	ErrNamespaceHasNoProjectLabel = errors.New("namespace has no project label")
 )
 
@@ -56,6 +59,17 @@ func NewWorkspaceReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*Work
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logging.FromContextOrPanic(ctx).WithName(WorkspaceControllerName)
+	ctx = logging.NewContext(ctx, log)
+	log.Info("Reconcile started")
+	rr, err := r.reconcile(ctx, req)
+	if rr.RequeueAfter > 0 {
+		log.Debug("Requeuing request", "requeueAfter", rr.RequeueAfter, "nextReconciliationTime", time.Now().Add(rr.RequeueAfter))
+	}
+	return rr, err
+}
+
+func (r *WorkspaceReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logging.FromContextOrPanic(ctx)
 
 	workspace := &pwv1alpha1.Workspace{}
@@ -298,7 +312,9 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *pw
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
-			log.Info("Deleted ClusterRole", "name", clusterRole.Name)
+			log.Debug("ClusterRole already deleted, nothing to do", "clusterRole", clusterRole.Name)
+		} else {
+			log.Debug("Deleted ClusterRole", "clusterRole", clusterRole.Name)
 		}
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
@@ -311,7 +327,9 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *pw
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
-			log.Info("Deleted ClusterRoleBinding", "name", clusterRoleBinding.Name)
+			log.Debug("ClusterRoleBinding already deleted, nothing to do", "clusterRoleBinding", clusterRoleBinding.Name)
+		} else {
+			log.Debug("Deleted ClusterRoleBinding", "clusterRoleBinding", clusterRoleBinding.Name)
 		}
 	}
 
