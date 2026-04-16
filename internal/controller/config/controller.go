@@ -137,10 +137,13 @@ func (c *PWOConfigController) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("projectworkspaceconfig").
 		WatchesRawSource(source.Kind(c.platformCluster.Cluster().GetCache(), &pwv1alpha1.ProjectWorkspaceConfig{}, &handler.TypedEnqueueRequestForObject[*pwv1alpha1.ProjectWorkspaceConfig]{}, ctrlutils.ToTypedPredicate[*pwv1alpha1.ProjectWorkspaceConfig](
-			predicate.Or(
-				predicate.GenerationChangedPredicate{},
-				ctrlutils.DeletionTimestampChangedPredicate{},
-				ctrlutils.GotAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueReconcile),
+			predicate.And(
+				ctrlutils.ExactNamePredicate(c.providerName, ""),
+				predicate.Or(
+					predicate.GenerationChangedPredicate{},
+					ctrlutils.DeletionTimestampChangedPredicate{},
+					ctrlutils.GotAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueReconcile),
+				),
 			),
 		))).
 		WatchesRawSource(source.Kind(c.platformCluster.Cluster().GetCache(), &providerv1alpha1.ServiceProvider{}, handler.TypedEnqueueRequestsFromMapFunc(func(_ context.Context, _ *providerv1alpha1.ServiceProvider) []ctrl.Request {
@@ -324,7 +327,7 @@ func (c *PWOConfigController) reconcile(ctx context.Context, req reconcile.Reque
 				{
 					APIGroups: elem.APIGroups,
 					Resources: elem.Resources,
-					Verbs:     []string{"get", "list", "watch"},
+					Verbs:     utils.ReadOnlyVerbs(),
 				},
 			},
 		}

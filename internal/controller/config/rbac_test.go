@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -32,6 +31,12 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 	}{
 		{
 			name: "Failed to Create/Update Project Cluster Roles",
+			projectPermissionsForRole: collections.ProjectMapToMap(defaultProjectPermissionsPerRole(), func(k pwv1alpha1.ProjectMemberRole, v []rbacv1.PolicyRule) (string, []rbacv1.PolicyRule) {
+				return utils.ProjectMemberRoleToRoleID(k), v
+			}),
+			workspacePermissionsForRole: collections.ProjectMapToMap(defaultWorkspacePermissionsPerRole(), func(k pwv1alpha1.WorkspaceMemberRole, v []rbacv1.PolicyRule) (string, []rbacv1.PolicyRule) {
+				return utils.WorkspaceMemberRoleToRoleID(k), v
+			}),
 			interceptorFuncs: interceptor.Funcs{
 				Create: func(ctx context.Context, client client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 					if _, ok := obj.(*rbacv1.ClusterRole); ok {
@@ -40,10 +45,16 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 					return nil
 				},
 			},
-			expectedError: ptr.To("some create error"),
+			expectedError: new("some create error"),
 		},
 		{
 			name: "Failed to Create/Update Workspace Cluster Roles",
+			projectPermissionsForRole: collections.ProjectMapToMap(defaultProjectPermissionsPerRole(), func(k pwv1alpha1.ProjectMemberRole, v []rbacv1.PolicyRule) (string, []rbacv1.PolicyRule) {
+				return utils.ProjectMemberRoleToRoleID(k), v
+			}),
+			workspacePermissionsForRole: collections.ProjectMapToMap(defaultWorkspacePermissionsPerRole(), func(k pwv1alpha1.WorkspaceMemberRole, v []rbacv1.PolicyRule) (string, []rbacv1.PolicyRule) {
+				return utils.WorkspaceMemberRoleToRoleID(k), v
+			}),
 			interceptorFuncs: interceptor.Funcs{
 				Create: func(ctx context.Context, client client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 					if role, ok := obj.(*rbacv1.ClusterRole); ok && role.Name == utils.ClusterRoleForRole(pwv1alpha1.WorkspaceRoleView) {
@@ -52,7 +63,7 @@ func TestRBACSetup_EnsureResources(t *testing.T) {
 					return client.Create(ctx, obj)
 				},
 			},
-			expectedError: ptr.To("some create error"),
+			expectedError: new("some create error"),
 		},
 		{
 			name:          "Successfully Create/Update Project and Workspace Cluster Roles",

@@ -25,6 +25,7 @@ includes:
       REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
       ENVTEST_REQUIRED: "true"
       CHART_COMPONENTS: "[]"
+      GENERATE_DOCS_INDEX: "true"
 
 tasks:
   platformservice:

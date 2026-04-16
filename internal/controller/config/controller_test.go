@@ -217,7 +217,7 @@ func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc 
 	ar, err := pwc.Car.AccessRequest(env.Ctx, req, sharedconfig.ClusterIDOnboardingDynamic)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 	ExpectWithOffset(1, ar.Namespace).To(Equal(podNamespace))
-	effectiveDynamicAccessPermissions := []rbacv1.PolicyRule{}
+	effectiveDynamicAccessPermissions := make([]rbacv1.PolicyRule, 0, len(alwaysExpectedDynamicAccessPermissions)+len(expected.dynamicAccessPermissions))
 	effectiveDynamicAccessPermissions = append(effectiveDynamicAccessPermissions, alwaysExpectedDynamicAccessPermissions...)
 	effectiveDynamicAccessPermissions = append(effectiveDynamicAccessPermissions, expected.dynamicAccessPermissions...)
 	// verify that each requested permission is actually in the AccessRequest
