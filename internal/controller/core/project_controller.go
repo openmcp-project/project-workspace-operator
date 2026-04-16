@@ -144,7 +144,7 @@ func (r *ProjectReconciler) reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err != nil {
 		return sr.ReturnError(err)
 	}
-	utils.LogOperationResult(log, projectNamespace, result)
+	utils.LogOperationResult(log, logging.INFO, projectNamespace, result)
 
 	project.Status.Namespace = projectNamespace.Name
 
@@ -194,7 +194,7 @@ func (r *ProjectReconciler) createOrUpdateRoleBinding(ctx context.Context, proje
 
 		return controllerutil.SetOwnerReference(project, roleBinding, r.Scheme)
 	})
-	utils.LogOperationResult(log, roleBinding, result)
+	utils.LogOperationResult(log, logging.INFO, roleBinding, result)
 	return err
 }
 
@@ -259,7 +259,7 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRole, result)
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -283,7 +283,7 @@ func (r *ProjectReconciler) createOrUpdateClusterRole(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRoleBinding, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRoleBinding, result)
 	}
 
 	return nil

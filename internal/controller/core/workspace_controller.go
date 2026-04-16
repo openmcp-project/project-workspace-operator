@@ -160,7 +160,7 @@ func (r *WorkspaceReconciler) reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return sr.ReturnError(err)
 	}
-	utils.LogOperationResult(log, workspaceNamespace, result)
+	utils.LogOperationResult(log, logging.INFO, workspaceNamespace, result)
 
 	workspace.Status.Namespace = workspaceNamespace.Name
 
@@ -225,7 +225,7 @@ func (r *WorkspaceReconciler) createOrUpdateRoleBinding(ctx context.Context, wor
 		roleBinding.Subjects = getSubjectsForWorkspaceRole(workspace, workspaceRole)
 		return nil
 	})
-	utils.LogOperationResult(log, roleBinding, result)
+	utils.LogOperationResult(log, logging.INFO, roleBinding, result)
 	return err
 }
 
@@ -262,7 +262,7 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRole, result)
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -285,7 +285,7 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRoleBinding, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRoleBinding, result)
 	}
 
 	return nil

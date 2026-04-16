@@ -39,12 +39,12 @@ func SetMetaDataLabel(meta metav1.Object, key, value string) {
 	meta.SetLabels(labels)
 }
 
-func LogOperationResult(log logging.Logger, obj client.Object, result controllerutil.OperationResult) {
+func LogOperationResult(log logging.Logger, level logging.LogLevel, obj client.Object, result controllerutil.OperationResult) {
 	objType := reflect.ValueOf(obj).Elem().Type()
 	if obj.GetNamespace() == "" {
-		log.Info(fmt.Sprintf("%s %s %s", objType.Name(), obj.GetName(), result))
+		log.Log(level, fmt.Sprintf("%s %s %s", objType.Name(), obj.GetName(), result))
 	} else {
-		log.Info(fmt.Sprintf("%s %s/%s %s", objType.Name(), obj.GetNamespace(), obj.GetName(), result))
+		log.Log(level, fmt.Sprintf("%s %s/%s %s", objType.Name(), obj.GetNamespace(), obj.GetName(), result))
 	}
 }
 

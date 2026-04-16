@@ -62,7 +62,7 @@ func (setup *RBACSetup) createOrUpdateProjectClusterRoles(ctx context.Context, p
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRole, result)
 	}
 
 	return nil
@@ -93,7 +93,7 @@ func (setup *RBACSetup) createOrUpdateWorkspaceClusterRoles(ctx context.Context,
 		if err != nil {
 			return err
 		}
-		utils.LogOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRole, result)
 	}
 
 	return nil
