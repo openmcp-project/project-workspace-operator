@@ -285,7 +285,7 @@ func defaultProjectPermissionsPerRole() map[pwv1alpha1.ProjectMemberRole][]rbacv
 			},
 			{
 				APIGroups: []string{corev1.GroupName},
-				Resources: []string{"serviceaccounts"},
+				Resources: []string{"secrets", "serviceaccounts"},
 				Verbs:     utils.AllVerbs(),
 			},
 			{

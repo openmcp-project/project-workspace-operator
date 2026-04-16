@@ -63,7 +63,7 @@ Note that workspaces (api group `core.openmcp.cloud`, version `v1alpha1`, kind `
 
 Via the optional `spec.project.additionalPermissions` field, end-users can be granted additional permissions within their project namespaces. The field expects a mapping from project roles (`admin`, `view`) to standard k8s RBAC definitions. Users with the corresponding role within the project will have the specified permissions within the project's namespace, in addition to the default ones.
 
-By default, users have permissions for workspaces and serviceaccounts, with the `view` role having only read access and the `admin` role having full access for these resources. Both roles can also list pods (there are usually no pods on the onboarding cluster, this is mainly to prevent k9s from crashing) and read resourcequotas. Admins can also create tokens for serviceaccounts.
+By default, users have permissions for workspaces and serviceaccounts, with the `view` role having only read access and the `admin` role having full access for these resources. Both roles can also list pods (there are usually no pods on the onboarding cluster, this is mainly to prevent k9s from crashing) and read resourcequotas. Admins can also create tokens for serviceaccounts and manage secrets.
 
 ### Workspace configuration
 

@@ -95,6 +95,10 @@ func BuiltinPermissibleProjectResourcesAdminOnly() []rbacv1.PolicyRule {
 			Resources: []string{"serviceaccounts/token"},
 			Verbs:     []string{"create"},
 		},
+		{
+			APIGroups: []string{corev1.GroupName},
+			Resources: []string{"secrets"},
+		},
 	}
 }
 
