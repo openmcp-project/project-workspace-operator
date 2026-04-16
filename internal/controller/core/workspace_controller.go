@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -59,19 +59,24 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log := logging.FromContextOrPanic(ctx)
 
 	workspace := &pwv1alpha1.Workspace{}
+	workspace.SetName(req.Name)
+	workspace.SetNamespace(req.Namespace)
+	if workspace.GroupVersionKind().Kind == "" {
+		workspace.SetGroupVersionKind(pwv1alpha1.GroupVersion.WithKind("Workspace"))
+	}
+	sr := r.sr.For(workspace)
 	if err := r.OnboardingStatic.Client().Get(ctx, req.NamespacedName, workspace); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Workspace not found")
-			return ctrl.Result{}, nil
+			return sr.StopRequeue()
 		}
-		log.Error(err, "unable to fetch Workspace")
-		return ctrl.Result{}, err
+		return sr.ReturnError(fmt.Errorf("error fetching workspace: %w", err))
 	}
 
 	project, err := r.getProjectByNamespace(ctx, workspace.Namespace)
 	if err != nil {
 		log.Error(err, "unable to fetch Project of Workspace")
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 
 	workspaceNamespace := &corev1.Namespace{
@@ -84,19 +89,17 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// If the workspace is not it deletion, this will return false
 	hasRemainingContent, err := r.handleRemainingContentBeforeDelete(ctx, workspace)
 	if err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 	if hasRemainingContent {
 		if err := r.OnboardingStatic.Client().Status().Update(ctx, workspace); err != nil {
 			log.Error(err, "failed to update status")
 		}
 
-		return ctrl.Result{
-			RequeueAfter: 3 * time.Second,
-		}, nil
+		return sr.IsStable() // naming is unintuitive, this requeues with increasing backoff
 	}
 
-	deleted, dresult, err := r.handleDelete(ctx, workspace, func() error {
+	deleted, rqt, err := r.handleDelete(ctx, workspace, func() error {
 		if err := r.OnboardingStatic.Client().Delete(ctx, workspaceNamespace); err != nil {
 			return client.IgnoreNotFound(err)
 		}
@@ -104,14 +107,23 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return err
 		}
 
-		return ResourcesRemainingError{RequeueAfter: 3 * time.Second}
+		return ResourcesRemainingError{}
 	})
 	if deleted || err != nil {
-		return dresult, err
+		switch rqt {
+		case RequeueError:
+			return sr.ReturnError(err)
+		case RequeueWithMinInterval:
+			return sr.IsProgressing()
+		case RequeueWithBackoff:
+			return sr.IsStable()
+		default:
+			return sr.StopRequeue()
+		}
 	}
 
 	if err := r.ensureFinalizer(ctx, workspace); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 
 	// Always update status
@@ -132,7 +144,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return nil
 	})
 	if err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 	utils.LogOperationResult(log, workspaceNamespace, result)
 
@@ -143,16 +155,16 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	//
 
 	if err := r.createOrUpdateClusterRole(ctx, project, workspace); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 	if err := r.createOrUpdateRoleBinding(ctx, workspace, pwv1alpha1.WorkspaceRoleAdmin); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 	if err := r.createOrUpdateRoleBinding(ctx, workspace, pwv1alpha1.WorkspaceRoleView); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 
-	return ctrl.Result{}, nil
+	return sr.StopRequeue()
 }
 
 func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespaceName string) (*pwv1alpha1.Project, error) {

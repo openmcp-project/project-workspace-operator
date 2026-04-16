@@ -244,7 +244,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: reconcile.Result{RequeueAfter: 3 * time.Second},
+			expectedResult: reconcile.Result{RequeueAfter: 5 * time.Second},
 			expectedErr:    nil,
 			validate: func(t *testing.T, ctx context.Context, c client.Client) error {
 				// check workspace status
@@ -287,9 +287,8 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			ctx := newContext()
 			req := newRequest(tC.initObjs[0])
 
-			sr, err := NewWorkspaceReconciler(c.Scheme(), &CommonReconciler{
-				ProviderName: "test",
-				Config: sharedconfig.NewFakeSharedInformation(c, nil, []sharedconfig.DeletionBlockingResource{
+			sr, err := NewWorkspaceReconciler(c.Scheme(), NewCommonReconciler(
+				sharedconfig.NewFakeSharedInformation(c, nil, []sharedconfig.DeletionBlockingResource{
 					{
 						GroupVersionKind: metav1.GroupVersionKind{
 							Group:   "",
@@ -299,12 +298,12 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 						Source: pwv1alpha1.SourceProjectWorkspaceConfig,
 					},
 				}, nil),
-			},
-			)
+				"test",
+			))
 			assert.NoError(t, err)
 
 			result, err := ctrl.Result{}, error(nil)
-			for i := 0; i < maxReconcileCycles; i++ {
+			for range maxReconcileCycles {
 				result, err = sr.Reconcile(ctx, req)
 				if result == tC.expectedResult || result.RequeueAfter == 0 || err != nil {
 					break
@@ -312,7 +311,7 @@ func Test_WorkspaceReconciler_Reconcile(t *testing.T) {
 			}
 
 			assert.Equal(t, tC.expectedResult, result)
-			assert.Equal(t, tC.expectedErr, err)
+			assert.ErrorIs(t, err, tC.expectedErr)
 
 			if tC.validate != nil {
 				assert.NoError(t, tC.validate(t, ctx, c))

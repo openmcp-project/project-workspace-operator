@@ -331,10 +331,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		}
 	}
 
-	commonReconciler := &core.CommonReconciler{
-		ProviderName: o.ProviderName,
-		Config:       cfgCtrl,
-	}
+	commonReconciler := core.NewCommonReconciler(cfgCtrl, o.ProviderName)
 
 	pr, err := core.NewProjectReconciler(mgr.GetScheme(), commonReconciler)
 	if err != nil {

@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/json"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/install"
@@ -38,6 +39,15 @@ func init() {
 type CommonReconciler struct {
 	Config       sharedconfig.SharedInformation
 	ProviderName string
+	sr           *smartrequeue.Store // the store's key includes kind, so we can use one store for both Projects and Workspaces
+}
+
+func NewCommonReconciler(config sharedconfig.SharedInformation, providerName string) *CommonReconciler {
+	return &CommonReconciler{
+		Config:       config,
+		ProviderName: providerName,
+		sr:           smartrequeue.NewStore(5*time.Second, 24*time.Hour, 1.2),
+	}
 }
 
 func (r *CommonReconciler) ensureFinalizer(ctx context.Context, o client.Object) error {
@@ -160,46 +170,55 @@ func (r *CommonReconciler) handleRemainingContentBeforeDelete(ctx context.Contex
 
 	return false, nil
 }
-func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, deleteFunc func() error) (bool, ctrl.Result, error) {
+func (r *CommonReconciler) handleDelete(ctx context.Context, o client.Object, deleteFunc func() error) (bool, RequeueType, error) {
 	if !utils.WasDeleted(o) {
-		return false, reconcile.Result{}, nil
+		return false, NoRequeue, nil
 	}
 
 	log := log.FromContext(ctx)
 	onboardingCluster, err := r.Config.OnboardingClusterStatic(ctx)
 	if err != nil {
-		return false, reconcile.Result{}, fmt.Errorf("failed to get onboarding cluster access: %w", err)
+		return false, RequeueError, fmt.Errorf("failed to get onboarding cluster access: %w", err)
 	}
 
 	if controllerutil.ContainsFinalizer(o, deleteFinalizer) {
 		if err := deleteFunc(); err != nil {
 			if rrErr, ok := err.(ResourcesRemainingError); ok {
 				log.Info(rrErr.Error())
-				return true, reconcile.Result(rrErr), nil
+				return true, RequeueWithBackoff, nil
 			}
 
-			return false, reconcile.Result{}, fmt.Errorf("failed to perform cleanup operation: %w", err)
+			return false, RequeueError, fmt.Errorf("failed to perform cleanup operation: %w", err)
 		}
 
 		controllerutil.RemoveFinalizer(o, deleteFinalizer)
 		if err := onboardingCluster.Client().Update(ctx, o); err != nil {
-			return false, reconcile.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+			return false, RequeueError, fmt.Errorf("failed to remove finalizer: %w", err)
 		}
 	}
 
-	return true, reconcile.Result{}, nil
+	return true, NoRequeue, nil
 }
 
 func (r *CommonReconciler) applyManagementLabel(obj metav1.Object) {
 	utils.SetManagementLabels(obj, r.ProviderName)
 }
 
+type RequeueType int
+
+const (
+	RequeueError RequeueType = iota
+	RequeueWithMinInterval
+	RequeueWithBackoff
+	NoRequeue
+)
+
 var _ error = ResourcesRemainingError{}
 
-type ResourcesRemainingError ctrl.Result
+type ResourcesRemainingError struct{}
 
 func (err ResourcesRemainingError) Error() string {
-	return fmt.Sprintf("cleanup is not finished yet because there are remaining resources. should check again in %s", err.RequeueAfter)
+	return "cleanup not finished yet due to remaining resources"
 }
 
 func (err ResourcesRemainingError) Is(target error) bool {
