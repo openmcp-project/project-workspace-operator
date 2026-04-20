@@ -6,6 +6,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/spf13/cobra"
+
+	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
 
 func (o *SharedOptions) PrintRaw(cmd *cobra.Command) {
@@ -20,7 +22,6 @@ func (o *SharedOptions) PrintRaw(cmd *cobra.Command) {
 func (o *SharedOptions) PrintCompleted(cmd *cobra.Command) {
 	raw := map[string]any{
 		"platformCluster": o.PlatformCluster.APIServerEndpoint(),
-		"providerName":    o.ProviderName,
 	}
 	data, err := yaml.Marshal(raw)
 	if err != nil {
@@ -55,6 +56,7 @@ func (o *RunOptions) PrintRaw(cmd *cobra.Command) {
 		return
 	}
 	cmd.Print(string(data))
+	cmd.Printf("v1Support: %t\n", sharedconfig.SupportV1)
 }
 
 func (o *RunOptions) PrintRawOptions(cmd *cobra.Command) {

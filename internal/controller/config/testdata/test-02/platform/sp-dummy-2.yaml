@@ -9,5 +9,5 @@ status:
   phase: Ready
   resources:
   - group: ""
-    kind: Secret
+    kind: Pod
     version: v1

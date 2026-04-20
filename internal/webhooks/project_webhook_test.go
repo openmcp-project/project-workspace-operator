@@ -98,7 +98,7 @@ var _ = Describe("Project Webhook", func() {
 			var err error
 			var projectName = uniqueName()
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",
@@ -143,7 +143,7 @@ var _ = Describe("Project Webhook", func() {
 			var err error
 			var projectName = uniqueName()
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind:      "ServiceAccount",
@@ -190,7 +190,7 @@ var _ = Describe("Project Webhook", func() {
 			var err error
 			var projectName = uniqueName()
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "Group",
@@ -235,7 +235,7 @@ var _ = Describe("Project Webhook", func() {
 			var err error
 			var projectName = uniqueName()
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",
@@ -313,7 +313,7 @@ var _ = Describe("Project Webhook", func() {
 			var err error
 			var projectName = uniqueName()
 
-			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverridesV2{
+			sharedInformationForTests.MemberOverridesData = pwv1alpha1.MemberOverrides{
 				{
 					Subject: pwv1alpha1.Subject{
 						Kind: "User",

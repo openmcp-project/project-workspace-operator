@@ -44,24 +44,7 @@ func (s Subject) RbacV1() rbacv1.Subject {
 	return rs
 }
 
-// MemberOverrides is a resource used to Manage admin access to the Project/Workspace operator resources.
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:scope=Cluster
-// +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
-type MemberOverrides struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   MemberOverridesSpec   `json:"spec,omitempty"`
-	Status MemberOverridesStatus `json:"status,omitempty"`
-}
-type MemberOverridesSpec struct {
-	MemberOverrides MemberOverridesV2 `json:"memberOverrides"`
-}
-
-type MemberOverridesV2 []MemberOverride
-
-type MemberOverridesStatus struct{}
+type MemberOverrides []MemberOverride
 
 // +kubebuilder:validation:Enum=admin;view
 type OverrideRole string
@@ -91,25 +74,7 @@ const (
 	OverrideResourceKindWorkspace = "Workspace"
 )
 
-// +kubebuilder:object:root=true
-type MemberOverridesList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MemberOverrides `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&MemberOverrides{}, &MemberOverridesList{})
-}
-
-func (m *MemberOverrides) HasAdminOverrideForResource(userInfo *authv1.UserInfo, resourceName, resourceKind string) bool {
-	if m == nil {
-		return false
-	}
-	return m.Spec.MemberOverrides.HasAdminOverrideForResource(userInfo, resourceName, resourceKind)
-}
-
-func (m MemberOverridesV2) HasAdminOverrideForResource(userInfo *authv1.UserInfo, resourceName, resourceKind string) bool {
+func (m MemberOverrides) HasAdminOverrideForResource(userInfo *authv1.UserInfo, resourceName, resourceKind string) bool {
 	for _, override := range m {
 		if !override.hasAdminRole() {
 			continue

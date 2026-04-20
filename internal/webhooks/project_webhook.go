@@ -7,12 +7,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/openmcp-project/controller-utils/pkg/logging"
 
 	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
 )
+
+const ProjectWebhookName = "project-webhook"
 
 // +kubebuilder:object:generate=false
 type ProjectWebhook struct {
@@ -23,9 +26,6 @@ type ProjectWebhook struct {
 	Identity          string
 	SharedInformation config.SharedInformation
 }
-
-// log is for logging in this package.
-var projectlog = logf.Log.WithName("project-resource")
 
 func SetupProjectWebhookWithManager(ctx context.Context, mgr ctrl.Manager, identity string, si config.SharedInformation) error {
 	pwh := &ProjectWebhook{
@@ -46,11 +46,13 @@ var _ admission.Defaulter[*pwv1alpha1.Project] = &ProjectWebhook{}
 
 // Default implements admission.Defaulter[*Project] so a webhook will be registered for the type
 func (p *ProjectWebhook) Default(ctx context.Context, obj *pwv1alpha1.Project) error {
+	log := logging.FromContextOrPanic(ctx).WithName(ProjectWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	project, err := expectProject(obj)
 	if err != nil {
 		return err
 	}
-	projectlog.Info("default", "name", project.Name)
+	log.Info("Default")
 
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {
@@ -68,11 +70,13 @@ var _ admission.Validator[*pwv1alpha1.Project] = &ProjectWebhook{}
 
 // ValidateCreate implements admission.Validator[*Project] so a webhook will be registered for the type
 func (v *ProjectWebhook) ValidateCreate(ctx context.Context, obj *pwv1alpha1.Project) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(ProjectWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	project, err := expectProject(obj)
 	if err != nil {
 		return
 	}
-	projectlog.Info("validate create", "name", project.Name)
+	log.Info("Validate create")
 
 	userInfo, err := userInfoFromContext(ctx)
 	if err != nil {
@@ -92,6 +96,8 @@ func (v *ProjectWebhook) ValidateCreate(ctx context.Context, obj *pwv1alpha1.Pro
 
 // ValidateUpdate implements admission.Validator[*Project] so a webhook will be registered for the type
 func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *pwv1alpha1.Project) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(ProjectWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	oldProject, err := expectProject(oldObj)
 	if err != nil {
 		return
@@ -101,7 +107,7 @@ func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *pwv
 	if err != nil {
 		return
 	}
-	projectlog.Info("validate update", "name", oldProject.Name)
+	log.Info("Validate update")
 
 	if err = verifyCreatedByUnchanged(oldProject, newProject); err != nil {
 		return
@@ -133,11 +139,13 @@ func (v *ProjectWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *pwv
 
 // ValidateDelete implements admission.Validator[*pwv1alpha1.Project] so a webhook will be registered for the type
 func (v *ProjectWebhook) ValidateDelete(ctx context.Context, obj *pwv1alpha1.Project) (warnings admission.Warnings, err error) {
+	log := logging.FromContextOrPanic(ctx).WithName(ProjectWebhookName)
+	ctx = logging.NewContext(ctx, log)
 	project, err := expectProject(obj)
 	if err != nil {
 		return
 	}
-	projectlog.Info("validate delete", "name", project.Name)
+	log.Info("Validate delete")
 
 	if validRole, err := v.ensureValidRole(ctx, project); !validRole {
 		return warnings, err

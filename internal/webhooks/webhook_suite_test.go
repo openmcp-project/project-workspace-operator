@@ -113,7 +113,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	sharedInformationForTests = config.NewFakeSharedInformation(nil, nil, nil, nil, nil, nil)
+	sharedInformationForTests = config.NewFakeSharedInformation(nil, nil, nil, nil)
 
 	err = SetupProjectWebhookWithManager(ctx, mgr, identity, sharedInformationForTests)
 	Expect(err).NotTo(HaveOccurred())

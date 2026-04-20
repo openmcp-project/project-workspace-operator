@@ -1,4 +1,4 @@
-package core
+package utils_test
 
 import (
 	"testing"
@@ -7,19 +7,20 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	openmcpv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
-func newTestProject(name string) *openmcpv1alpha1.Project {
-	return &openmcpv1alpha1.Project{
+func newTestProject(name string) *pwv1alpha1.Project {
+	return &pwv1alpha1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
 }
 
-func newTestWorkspace(namespace string, name string) *openmcpv1alpha1.Workspace {
-	return &openmcpv1alpha1.Workspace{
+func newTestWorkspace(namespace string, name string) *pwv1alpha1.Workspace {
+	return &pwv1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -30,7 +31,7 @@ func newTestWorkspace(namespace string, name string) *openmcpv1alpha1.Workspace 
 func TestNamespaceForProject(t *testing.T) {
 	tests := []struct {
 		description string
-		project     *openmcpv1alpha1.Project
+		project     *pwv1alpha1.Project
 		expected    string
 	}{
 		{
@@ -47,7 +48,7 @@ func TestNamespaceForProject(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			uut := namespaceForProject(test.project)
+			uut := utils.NamespaceForProject(test.project)
 
 			assert.Equal(t, test.expected, uut)
 		})
@@ -57,7 +58,7 @@ func TestNamespaceForProject(t *testing.T) {
 func TestNamespaceForWorkspace(t *testing.T) {
 	tests := []struct {
 		description string
-		workspace   *openmcpv1alpha1.Workspace
+		workspace   *pwv1alpha1.Workspace
 		expected    string
 	}{
 		{
@@ -74,7 +75,7 @@ func TestNamespaceForWorkspace(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			uut := namespaceForWorkspace(test.workspace)
+			uut := utils.NamespaceForWorkspace(test.workspace)
 
 			assert.Equal(t, test.expected, uut)
 		})
@@ -85,18 +86,18 @@ func TestWasDeleted(t *testing.T) {
 	t.Run("returns 'true' if the object has been deleted", func(t *testing.T) {
 		timestamp := metav1.Now()
 
-		uut := &openmcpv1alpha1.Project{
+		uut := &pwv1alpha1.Project{
 			ObjectMeta: metav1.ObjectMeta{
 				DeletionTimestamp: &timestamp,
 			},
 		}
 
-		assert.True(t, wasDeleted(uut))
+		assert.True(t, utils.WasDeleted(uut))
 	})
 	t.Run("returns 'false' if the object is not deleted", func(t *testing.T) {
-		uut := &openmcpv1alpha1.Project{}
+		uut := &pwv1alpha1.Project{}
 
-		assert.False(t, wasDeleted(uut))
+		assert.False(t, utils.WasDeleted(uut))
 	})
 }
 
@@ -104,23 +105,23 @@ func TestSetMetaDataLabel(t *testing.T) {
 	t.Run("set's the label on an object which has no other labels set", func(t *testing.T) {
 		var obj metav1.ObjectMeta
 
-		setMetaDataLabel(&obj, "test", "abc")
+		utils.SetMetaDataLabel(&obj, "test", "abc")
 
 		assert.Equal(t, map[string]string{"test": "abc"}, obj.GetLabels())
 	})
 	t.Run("overwrites the label on an object if it was set before", func(t *testing.T) {
 		var obj metav1.ObjectMeta
 
-		setMetaDataLabel(&obj, "test", "abc")
-		setMetaDataLabel(&obj, "test", "def")
+		utils.SetMetaDataLabel(&obj, "test", "abc")
+		utils.SetMetaDataLabel(&obj, "test", "def")
 
 		assert.Equal(t, map[string]string{"test": "def"}, obj.GetLabels())
 	})
 	t.Run("doesn't modify other labels", func(t *testing.T) {
 		var obj metav1.ObjectMeta
 
-		setMetaDataLabel(&obj, "a", "abc")
-		setMetaDataLabel(&obj, "b", "def")
+		utils.SetMetaDataLabel(&obj, "a", "abc")
+		utils.SetMetaDataLabel(&obj, "b", "def")
 
 		assert.Equal(t, map[string]string{"a": "abc", "b": "def"}, obj.GetLabels())
 	})

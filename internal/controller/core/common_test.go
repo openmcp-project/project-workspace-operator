@@ -11,7 +11,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -31,26 +30,20 @@ func Test_ResourcesRemainingError_Is(t *testing.T) {
 	}{
 		{
 			desc:     "should return true for same error",
-			a:        ResourcesRemainingError{RequeueAfter: 10 * time.Second},
-			b:        ResourcesRemainingError{RequeueAfter: 10 * time.Second},
-			expected: true,
-		},
-		{
-			desc:     "should return true for similar error",
-			a:        ResourcesRemainingError{RequeueAfter: 10 * time.Second},
-			b:        ResourcesRemainingError{RequeueAfter: 20 * time.Second},
+			a:        ResourcesRemainingError{},
+			b:        ResourcesRemainingError{},
 			expected: true,
 		},
 		{
 			desc:     "should return false for different error",
-			a:        ResourcesRemainingError{RequeueAfter: 10 * time.Second},
+			a:        ResourcesRemainingError{},
 			b:        fs.ErrNotExist,
 			expected: false,
 		},
 		{
 			desc:     "should return false for different error (swapped)",
 			a:        fs.ErrNotExist,
-			b:        ResourcesRemainingError{RequeueAfter: 10 * time.Second},
+			b:        ResourcesRemainingError{},
 			expected: false,
 		},
 	}
@@ -72,9 +65,9 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 	}
 
 	type exp struct {
-		b      bool
-		result ctrl.Result
-		err    error
+		b   bool
+		rqt RequeueType
+		err error
 	}
 
 	test := []struct {
@@ -94,21 +87,21 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 				return nil
 			},
 			expected: exp{
-				b:      false,
-				result: ctrl.Result{},
-				err:    nil,
+				b:   false,
+				rqt: NoRequeue,
+				err: nil,
 			},
 		},
 		{
 			name: "Resources are still remaining in the cluster",
 			obj:  testProject.DeepCopy(),
 			deleteFunc: func() error {
-				return ResourcesRemainingError{RequeueAfter: 3 * time.Second}
+				return ResourcesRemainingError{}
 			},
 			expected: exp{
-				b:      true,
-				result: ctrl.Result{RequeueAfter: 3 * time.Second},
-				err:    nil,
+				b:   true,
+				rqt: RequeueWithBackoff,
+				err: nil,
 			},
 		},
 		{
@@ -118,9 +111,9 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 				return errors.New("some error")
 			},
 			expected: exp{
-				b:      false,
-				result: ctrl.Result{},
-				err:    fmt.Errorf("failed to perform cleanup operation: %w", errors.New("some error")),
+				b:   false,
+				rqt: RequeueError,
+				err: fmt.Errorf("failed to perform cleanup operation: %w", errors.New("some error")),
 			},
 		},
 		{
@@ -138,9 +131,9 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 				return nil
 			},
 			expected: exp{
-				b:      false,
-				result: ctrl.Result{},
-				err:    fmt.Errorf("failed to remove finalizer: %w", errors.New("some update error")),
+				b:   false,
+				rqt: RequeueError,
+				err: fmt.Errorf("failed to remove finalizer: %w", errors.New("some update error")),
 			},
 		},
 		{
@@ -150,9 +143,9 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 				return nil
 			},
 			expected: exp{
-				b:      true,
-				result: ctrl.Result{},
-				err:    nil,
+				b:   true,
+				rqt: NoRequeue,
+				err: nil,
 			},
 			validateFunc: func(ctx context.Context, c client.Client) error {
 				project := &openmcpv1alpha1.Project{}
@@ -168,14 +161,14 @@ func Test_CommonReconciler_handleDelete(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil, nil),
-				ControllerName: "test-controller",
+				Config:       config.NewFakeSharedInformation(fakeClient, nil, nil, nil),
+				ProviderName: "test",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))
 
-			b, result, err := r.handleDelete(ctx, tt.obj, tt.deleteFunc)
+			b, rqt, err := r.handleDelete(ctx, tt.obj, tt.deleteFunc)
 			assert.Equal(t, tt.expected.b, b)
-			assert.Equal(t, tt.expected.result, result)
+			assert.Equal(t, tt.expected.rqt, rqt)
 			assert.Equal(t, tt.expected.err, err)
 
 			if tt.validateFunc != nil {
@@ -250,8 +243,8 @@ func Test_CommonReconciler_ensureFinalizer(t *testing.T) {
 			ctx := context.TODO()
 			fakeClient := fake.NewClientBuilder().WithScheme(Scheme).WithObjects(tt.obj).WithInterceptorFuncs(tt.interceptorFuncs).Build()
 			r := &CommonReconciler{
-				Config:         config.NewFakeSharedInformation(fakeClient, nil, nil, nil, nil, nil),
-				ControllerName: "test-controller",
+				Config:       config.NewFakeSharedInformation(fakeClient, nil, nil, nil),
+				ProviderName: "test",
 			}
 			assert.NoError(t, fakeClient.Get(ctx, client.ObjectKeyFromObject(tt.obj), tt.obj))
 

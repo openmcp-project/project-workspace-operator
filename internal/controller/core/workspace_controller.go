@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,15 +15,18 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/logging"
 
-	"github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
+const WorkspaceControllerName = "workspace"
+
 var (
-	ErrNamespaceHasNoLabels       = errors.New("namespace has no labels. Map is nil")
+	ErrNamespaceHasNoLabels       = errors.New("namespace has no labels, map is nil")
 	ErrNamespaceHasNoProjectLabel = errors.New("namespace has no project label")
 )
 
@@ -55,27 +59,43 @@ func NewWorkspaceReconciler(scheme *runtime.Scheme, cr *CommonReconciler) (*Work
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := logging.FromContextOrPanic(ctx).WithName(WorkspaceControllerName)
+	ctx = logging.NewContext(ctx, log)
+	log.Info("Reconcile started")
+	rr, err := r.reconcile(ctx, req)
+	if rr.RequeueAfter > 0 {
+		log.Debug("Requeuing request", "requeueAfter", rr.RequeueAfter, "nextReconciliationTime", time.Now().Add(rr.RequeueAfter))
+	}
+	return rr, err
+}
 
-	workspace := &v1alpha1.Workspace{}
+func (r *WorkspaceReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logging.FromContextOrPanic(ctx)
+
+	workspace := &pwv1alpha1.Workspace{}
+	workspace.SetName(req.Name)
+	workspace.SetNamespace(req.Namespace)
+	if workspace.GroupVersionKind().Kind == "" {
+		workspace.SetGroupVersionKind(pwv1alpha1.GroupVersion.WithKind("Workspace"))
+	}
+	sr := r.sr.For(workspace)
 	if err := r.OnboardingStatic.Client().Get(ctx, req.NamespacedName, workspace); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Workspace not found")
-			return ctrl.Result{}, nil
+			return sr.StopRequeue()
 		}
-		log.Error(err, "unable to fetch Workspace")
-		return ctrl.Result{}, err
+		return sr.ReturnError(fmt.Errorf("error fetching workspace: %w", err))
 	}
 
 	project, err := r.getProjectByNamespace(ctx, workspace.Namespace)
 	if err != nil {
 		log.Error(err, "unable to fetch Project of Workspace")
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 
 	workspaceNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespaceForWorkspace(workspace),
+			Name: utils.NamespaceForWorkspace(workspace),
 		},
 	}
 
@@ -83,19 +103,17 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// If the workspace is not it deletion, this will return false
 	hasRemainingContent, err := r.handleRemainingContentBeforeDelete(ctx, workspace)
 	if err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 	if hasRemainingContent {
 		if err := r.OnboardingStatic.Client().Status().Update(ctx, workspace); err != nil {
 			log.Error(err, "failed to update status")
 		}
 
-		return ctrl.Result{
-			RequeueAfter: 3 * time.Second,
-		}, nil
+		return sr.IsStable() // naming is unintuitive, this requeues with increasing backoff
 	}
 
-	deleted, dresult, err := r.handleDelete(ctx, workspace, func() error {
+	deleted, rqt, err := r.handleDelete(ctx, workspace, func() error {
 		if err := r.OnboardingStatic.Client().Delete(ctx, workspaceNamespace); err != nil {
 			return client.IgnoreNotFound(err)
 		}
@@ -103,14 +121,23 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return err
 		}
 
-		return ResourcesRemainingError{RequeueAfter: 3 * time.Second}
+		return ResourcesRemainingError{}
 	})
 	if deleted || err != nil {
-		return dresult, err
+		switch rqt {
+		case RequeueError:
+			return sr.ReturnError(err)
+		case RequeueWithMinInterval:
+			return sr.IsProgressing()
+		case RequeueWithBackoff:
+			return sr.IsStable()
+		default:
+			return sr.StopRequeue()
+		}
 	}
 
 	if err := r.ensureFinalizer(ctx, workspace); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
 
 	// Always update status
@@ -125,15 +152,15 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	//
 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.OnboardingStatic.Client(), workspaceNamespace, func() error {
-		setWorkspaceLabel(workspaceNamespace, workspace.Name)
-		setProjectLabel(workspaceNamespace, project.Name)
+		utils.SetWorkspaceLabel(workspaceNamespace, workspace.Name)
+		utils.SetProjectLabel(workspaceNamespace, project.Name)
 		r.applyManagementLabel(workspaceNamespace)
 		return nil
 	})
 	if err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
-	logOperationResult(log, workspaceNamespace, result)
+	utils.LogOperationResult(log, logging.INFO, workspaceNamespace, result)
 
 	workspace.Status.Namespace = workspaceNamespace.Name
 
@@ -142,19 +169,19 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	//
 
 	if err := r.createOrUpdateClusterRole(ctx, project, workspace); err != nil {
-		return ctrl.Result{}, err
+		return sr.ReturnError(err)
 	}
-	if err := r.createOrUpdateRoleBinding(ctx, workspace, v1alpha1.WorkspaceRoleAdmin); err != nil {
-		return ctrl.Result{}, err
+	if err := r.createOrUpdateRoleBinding(ctx, workspace, pwv1alpha1.WorkspaceRoleAdmin); err != nil {
+		return sr.ReturnError(err)
 	}
-	if err := r.createOrUpdateRoleBinding(ctx, workspace, v1alpha1.WorkspaceRoleView); err != nil {
-		return ctrl.Result{}, err
+	if err := r.createOrUpdateRoleBinding(ctx, workspace, pwv1alpha1.WorkspaceRoleView); err != nil {
+		return sr.ReturnError(err)
 	}
 
-	return ctrl.Result{}, nil
+	return sr.StopRequeue()
 }
 
-func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespaceName string) (*v1alpha1.Project, error) {
+func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespaceName string) (*pwv1alpha1.Project, error) {
 	namespace := &corev1.Namespace{}
 	if err := r.OnboardingStatic.Client().Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err != nil {
 		return nil, err
@@ -164,12 +191,12 @@ func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespa
 		return nil, ErrNamespaceHasNoLabels
 	}
 
-	projectName := namespace.Labels[labelProject]
+	projectName := namespace.Labels[utils.LabelProject]
 	if projectName == "" {
 		return nil, ErrNamespaceHasNoProjectLabel
 	}
 
-	project := &v1alpha1.Project{}
+	project := &pwv1alpha1.Project{}
 	if err := r.OnboardingStatic.Client().Get(ctx, types.NamespacedName{Name: projectName}, project); err != nil {
 		return nil, err
 	}
@@ -177,11 +204,11 @@ func (r *WorkspaceReconciler) getProjectByNamespace(ctx context.Context, namespa
 	return project, nil
 }
 
-func (r *WorkspaceReconciler) createOrUpdateRoleBinding(ctx context.Context, workspace *v1alpha1.Workspace, workspaceRole v1alpha1.WorkspaceMemberRole) error {
-	log := log.FromContext(ctx)
+func (r *WorkspaceReconciler) createOrUpdateRoleBinding(ctx context.Context, workspace *pwv1alpha1.Workspace, workspaceRole pwv1alpha1.WorkspaceMemberRole) error {
+	log := logging.FromContextOrPanic(ctx)
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      roleBindingForRole(workspaceRole),
+			Name:      utils.RoleBindingForRole(workspaceRole),
 			Namespace: workspace.Status.Namespace,
 		},
 	}
@@ -192,29 +219,29 @@ func (r *WorkspaceReconciler) createOrUpdateRoleBinding(ctx context.Context, wor
 		roleBinding.RoleRef = rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "ClusterRole",
-			Name:     clusterRoleForRole(workspaceRole),
+			Name:     utils.ClusterRoleForRole(workspaceRole),
 		}
 
 		roleBinding.Subjects = getSubjectsForWorkspaceRole(workspace, workspaceRole)
 		return nil
 	})
-	logOperationResult(log, roleBinding, result)
+	utils.LogOperationResult(log, logging.INFO, roleBinding, result)
 	return err
 }
 
 // createOrUpdateClusterRole manages the ClusterRole and ClusterRoleBinding granting GET permissions to the namespace belonging to the workspace.
-func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, project *v1alpha1.Project, ws *v1alpha1.Workspace) error {
-	log := log.FromContext(ctx)
+func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, project *pwv1alpha1.Project, ws *pwv1alpha1.Workspace) error {
+	log := logging.FromContextOrPanic(ctx)
 
-	workspaceRoles := []v1alpha1.WorkspaceMemberRole{
-		v1alpha1.WorkspaceRoleAdmin,
-		v1alpha1.WorkspaceRoleView,
+	workspaceRoles := []pwv1alpha1.WorkspaceMemberRole{
+		pwv1alpha1.WorkspaceRoleAdmin,
+		pwv1alpha1.WorkspaceRoleView,
 	}
 
 	for _, role := range workspaceRoles {
 		clusterRole := &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRoleWithParent(ws, role, project),
+				Name: utils.ClusterRoleForEntityAndRoleWithParent(ws, role, project),
 			},
 		}
 
@@ -235,11 +262,11 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 		if err != nil {
 			return err
 		}
-		logOperationResult(log, clusterRole, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRole, result)
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRoleWithParent(ws, role, project),
+				Name: utils.ClusterRoleForEntityAndRoleWithParent(ws, role, project),
 			},
 		}
 
@@ -258,7 +285,7 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 		if err != nil {
 			return err
 		}
-		logOperationResult(log, clusterRoleBinding, result)
+		utils.LogOperationResult(log, logging.INFO, clusterRoleBinding, result)
 	}
 
 	return nil
@@ -266,18 +293,18 @@ func (r *WorkspaceReconciler) createOrUpdateClusterRole(ctx context.Context, pro
 
 // deleteClusterRole deletes the ClusterRole and ClusterRoleBinding that were created for the Workspace.
 // It has to be done explicitly because cross-namespace OwnerReferences are not allowed.
-func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1alpha1.Project, ws *v1alpha1.Workspace) error {
-	log := log.FromContext(ctx)
+func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *pwv1alpha1.Project, ws *pwv1alpha1.Workspace) error {
+	log := logging.FromContextOrPanic(ctx)
 
-	workspaceRoles := []v1alpha1.WorkspaceMemberRole{
-		v1alpha1.WorkspaceRoleAdmin,
-		v1alpha1.WorkspaceRoleView,
+	workspaceRoles := []pwv1alpha1.WorkspaceMemberRole{
+		pwv1alpha1.WorkspaceRoleAdmin,
+		pwv1alpha1.WorkspaceRoleView,
 	}
 
 	for _, role := range workspaceRoles {
 		clusterRole := &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRoleWithParent(ws, role, project),
+				Name: utils.ClusterRoleForEntityAndRoleWithParent(ws, role, project),
 			},
 		}
 
@@ -285,12 +312,14 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
-			log.Info("Deleted ClusterRole", "name", clusterRole.Name)
+			log.Debug("ClusterRole already deleted, nothing to do", "clusterRole", clusterRole.Name)
+		} else {
+			log.Debug("Deleted ClusterRole", "clusterRole", clusterRole.Name)
 		}
 
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: clusterRoleForEntityAndRoleWithParent(ws, role, project),
+				Name: utils.ClusterRoleForEntityAndRoleWithParent(ws, role, project),
 			},
 		}
 
@@ -298,7 +327,9 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
-			log.Info("Deleted ClusterRoleBinding", "name", clusterRoleBinding.Name)
+			log.Debug("ClusterRoleBinding already deleted, nothing to do", "clusterRoleBinding", clusterRoleBinding.Name)
+		} else {
+			log.Debug("Deleted ClusterRoleBinding", "clusterRoleBinding", clusterRoleBinding.Name)
 		}
 	}
 
@@ -308,11 +339,11 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *v1
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Workspace{}).
+		For(&pwv1alpha1.Workspace{}).
 		Complete(r)
 }
 
-func getSubjectsForWorkspaceRole(workspace *v1alpha1.Workspace, role v1alpha1.WorkspaceMemberRole) []rbacv1.Subject {
+func getSubjectsForWorkspaceRole(workspace *pwv1alpha1.Workspace, role pwv1alpha1.WorkspaceMemberRole) []rbacv1.Subject {
 	subjects := []rbacv1.Subject{}
 
 	for _, member := range workspace.Spec.Members {
@@ -324,7 +355,7 @@ func getSubjectsForWorkspaceRole(workspace *v1alpha1.Workspace, role v1alpha1.Wo
 	return subjects
 }
 
-func hasWorkspaceRole(member v1alpha1.WorkspaceMember, role v1alpha1.WorkspaceMemberRole) bool {
+func hasWorkspaceRole(member pwv1alpha1.WorkspaceMember, role pwv1alpha1.WorkspaceMemberRole) bool {
 	for _, memberRole := range member.Roles {
 		if memberRole == role {
 			return true

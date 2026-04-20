@@ -9,5 +9,5 @@ status:
   phase: Ready
   resources:
   - group: ""
-    kind: ConfigMap
+    kind: Service
     version: v1

@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,9 +30,10 @@ import (
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
-	pwov1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
 	"github.com/openmcp-project/project-workspace-operator/api/install"
 	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	"github.com/openmcp-project/project-workspace-operator/internal/utils"
 )
 
 const (
@@ -47,12 +51,12 @@ var platformScheme = install.InstallOperatorAPIsPlatform(runtime.NewScheme())
 // This is for the builtin deletion blocking resources
 var alwaysKnownAPIResources = []*metav1.APIResourceList{
 	{
-		GroupVersion: pwov1alpha1.GroupVersion.String(),
+		GroupVersion: pwv1alpha1.GroupVersion.String(),
 		APIResources: []metav1.APIResource{
 			{
 				Name:       "workspaces",
-				Group:      pwov1alpha1.GroupVersion.Group,
-				Version:    pwov1alpha1.GroupVersion.Version,
+				Group:      pwv1alpha1.GroupVersion.Group,
+				Version:    pwv1alpha1.GroupVersion.Version,
 				Kind:       "Workspace",
 				Namespaced: true,
 			},
@@ -71,20 +75,16 @@ var alwaysKnownAPIResources = []*metav1.APIResourceList{
 		},
 	},
 }
-var alwaysExpectedDynamicAccessPermissions = []clustersv1alpha1.PermissionsRequest{
+var alwaysExpectedDynamicAccessPermissions = []rbacv1.PolicyRule{
 	{
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"core.openmcp.cloud"},
-				Resources: []string{
-					"workspaces",
-					"workspaces/status",
-					"managedcontrolplanev2s",
-					"managedcontrolplanev2s/status",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
+		APIGroups: []string{sharedconfig.OpenMCPV1ApiGroup},
+		Resources: []string{
+			"workspaces",
+			"workspaces/status",
+			"managedcontrolplanev2s",
+			"managedcontrolplanev2s/status",
 		},
+		Verbs: utils.ReadOnlyVerbs(),
 	},
 }
 
@@ -160,14 +160,26 @@ func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResour
 	return pwc, env
 }
 
+func sortPolicyRuleFields(rules []rbacv1.PolicyRule) []rbacv1.PolicyRule {
+	res := make([]rbacv1.PolicyRule, len(rules))
+	for i := range rules {
+		sortedRule := rules[i].DeepCopy()
+		slices.Sort(sortedRule.APIGroups)
+		slices.Sort(sortedRule.NonResourceURLs)
+		slices.Sort(sortedRule.Resources)
+		slices.Sort(sortedRule.ResourceNames)
+		slices.Sort(sortedRule.Verbs)
+		res[i] = *sortedRule
+	}
+	return res
+}
+
 type expectedValues struct {
 	resourcesBlockingProjectDeletion   []sharedconfig.DeletionBlockingResource
 	resourcesBlockingWorkspaceDeletion []sharedconfig.DeletionBlockingResource
-	projectViewerPermissions           []rbacv1.PolicyRule
-	projectAdminPermissions            []rbacv1.PolicyRule
-	workspaceViewerPermissions         []rbacv1.PolicyRule
-	workspaceAdminPermissions          []rbacv1.PolicyRule
-	dynamicAccessPermissions           *clustersv1alpha1.TokenConfig
+	projectPermissionsPerRole          map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule
+	workspacePermissionsPerRole        map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule
+	dynamicAccessPermissions           []rbacv1.PolicyRule
 }
 
 func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc *sharedconfig.PWOConfigController) {
@@ -175,9 +187,9 @@ func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc 
 	EventuallyWithOffset(1, env.ShouldReconcile).WithArguments(pwcRec, req).Should(WithTransform(func(rr reconcile.Result) time.Duration { return rr.RequeueAfter }, BeZero()))
 
 	_, err := pwc.OnboardingClusterStatic(env.Ctx)
-	Expect(err).ToNot(HaveOccurred())
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 	_, err = pwc.OnboardingClusterDynamic(env.Ctx)
-	Expect(err).ToNot(HaveOccurred())
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 
 	actualResourcesBlockingProjectDeletion, err := pwc.ResourcesBlockingProjectDeletion(env.Ctx)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
@@ -187,29 +199,43 @@ func (expected *expectedValues) validate(env *testutils.ComplexEnvironment, pwc 
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 	ExpectWithOffset(1, actualResourcesBlockingWorkspaceDeletion).To(ConsistOf(expected.resourcesBlockingWorkspaceDeletion), "resources blocking workspace deletion do not match")
 
-	actualProjectViewerPermissions, err := pwc.ProjectPermissionsForRole(env.Ctx, sharedconfig.ViewerRole)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-	ExpectWithOffset(1, actualProjectViewerPermissions).To(ConsistOf(expected.projectViewerPermissions), "project viewer permissions do not match")
-
-	actualProjectAdminPermissions, err := pwc.ProjectPermissionsForRole(env.Ctx, sharedconfig.AdminRole)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-	ExpectWithOffset(1, actualProjectAdminPermissions).To(ConsistOf(expected.projectAdminPermissions), "project admin permissions do not match")
-
-	actualWorkspaceViewerPermissions, err := pwc.WorkspacePermissionsForRole(env.Ctx, sharedconfig.ViewerRole)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-	ExpectWithOffset(1, actualWorkspaceViewerPermissions).To(ConsistOf(expected.workspaceViewerPermissions), "workspace viewer permissions do not match")
-
-	actualWorkspaceAdminPermissions, err := pwc.WorkspacePermissionsForRole(env.Ctx, sharedconfig.AdminRole)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-	ExpectWithOffset(1, actualWorkspaceAdminPermissions).To(ConsistOf(expected.workspaceAdminPermissions), "workspace admin permissions do not match")
+	for role := range utils.ProjectRolesWithVerbs() {
+		cr := &rbacv1.ClusterRole{}
+		cr.Name = utils.ClusterRoleForRole(role)
+		ExpectWithOffset(1, env.Client(onboardingClusterID).Get(env.Ctx, client.ObjectKeyFromObject(cr), cr)).To(Succeed())
+		expectedRules := sortPolicyRuleFields(expected.projectPermissionsPerRole[role])
+		ExpectWithOffset(1, cr.Rules).To(WithTransform(sortPolicyRuleFields, ConsistOf(expectedRules)))
+	}
+	for role := range utils.WorkspaceRolesWithVerbs() {
+		cr := &rbacv1.ClusterRole{}
+		cr.Name = utils.ClusterRoleForRole(role)
+		ExpectWithOffset(1, env.Client(onboardingClusterID).Get(env.Ctx, client.ObjectKeyFromObject(cr), cr)).To(Succeed())
+		expectedRules := sortPolicyRuleFields(expected.workspacePermissionsPerRole[role])
+		ExpectWithOffset(1, cr.Rules).To(WithTransform(sortPolicyRuleFields, ConsistOf(expectedRules)))
+	}
 
 	ar, err := pwc.Car.AccessRequest(env.Ctx, req, sharedconfig.ClusterIDOnboardingDynamic)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 	ExpectWithOffset(1, ar.Namespace).To(Equal(podNamespace))
-	effectiveDynamicAccessPermissions := &clustersv1alpha1.TokenConfig{Permissions: []clustersv1alpha1.PermissionsRequest{}}
-	effectiveDynamicAccessPermissions.Permissions = append(effectiveDynamicAccessPermissions.Permissions, alwaysExpectedDynamicAccessPermissions...)
-	effectiveDynamicAccessPermissions.Permissions = append(effectiveDynamicAccessPermissions.Permissions, expected.dynamicAccessPermissions.Permissions...)
-	ExpectWithOffset(1, ar.Spec.Token).To(Equal(effectiveDynamicAccessPermissions), "dynamic access permissions do not match")
+	effectiveDynamicAccessPermissions := make([]rbacv1.PolicyRule, 0, len(alwaysExpectedDynamicAccessPermissions)+len(expected.dynamicAccessPermissions))
+	effectiveDynamicAccessPermissions = append(effectiveDynamicAccessPermissions, alwaysExpectedDynamicAccessPermissions...)
+	effectiveDynamicAccessPermissions = append(effectiveDynamicAccessPermissions, expected.dynamicAccessPermissions...)
+	// verify that each requested permission is actually in the AccessRequest
+	// order and grouping will be ignored
+	for _, expectedRule := range effectiveDynamicAccessPermissions {
+		for _, expectedApiGroup := range expectedRule.APIGroups {
+			for _, expectedResource := range expectedRule.Resources {
+				// verify that the AccessRequest contains permissions for this resource with this apigroup with the expected verbs
+				ExpectWithOffset(1, ar.Spec.Token.Permissions).To(ContainElement(WithTransform(func(pr clustersv1alpha1.PermissionsRequest) []rbacv1.PolicyRule {
+					return pr.Rules
+				}, ContainElement(MatchFields(IgnoreExtras, Fields{
+					"APIGroups": ContainElement(expectedApiGroup),
+					"Resources": ContainElement(expectedResource),
+					"Verbs":     ConsistOf(expectedRule.Verbs),
+				})))))
+			}
+		}
+	}
 }
 
 func (exp *expectedValues) clone() *expectedValues {
@@ -225,59 +251,240 @@ func (exp *expectedValues) clone() *expectedValues {
 		res.resourcesBlockingWorkspaceDeletion[i] = *exp.resourcesBlockingWorkspaceDeletion[i].DeepCopy()
 	}
 
-	res.projectViewerPermissions = make([]rbacv1.PolicyRule, len(exp.projectViewerPermissions))
-	for i := range exp.projectViewerPermissions {
-		res.projectViewerPermissions[i] = *exp.projectViewerPermissions[i].DeepCopy()
+	res.projectPermissionsPerRole = make(map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule, len(exp.projectPermissionsPerRole))
+	for role, rules := range exp.projectPermissionsPerRole {
+		res.projectPermissionsPerRole[role] = make([]rbacv1.PolicyRule, len(rules))
+		for i := range rules {
+			res.projectPermissionsPerRole[role][i] = *rules[i].DeepCopy()
+		}
 	}
 
-	res.projectAdminPermissions = make([]rbacv1.PolicyRule, len(exp.projectAdminPermissions))
-	for i := range exp.projectAdminPermissions {
-		res.projectAdminPermissions[i] = *exp.projectAdminPermissions[i].DeepCopy()
+	res.workspacePermissionsPerRole = make(map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule, len(exp.workspacePermissionsPerRole))
+	for role, rules := range exp.workspacePermissionsPerRole {
+		res.workspacePermissionsPerRole[role] = make([]rbacv1.PolicyRule, len(rules))
+		for i := range rules {
+			res.workspacePermissionsPerRole[role][i] = *rules[i].DeepCopy()
+		}
 	}
 
-	res.workspaceViewerPermissions = make([]rbacv1.PolicyRule, len(exp.workspaceViewerPermissions))
-	for i := range exp.workspaceViewerPermissions {
-		res.workspaceViewerPermissions[i] = *exp.workspaceViewerPermissions[i].DeepCopy()
+	res.dynamicAccessPermissions = make([]rbacv1.PolicyRule, len(exp.dynamicAccessPermissions))
+	for i := range exp.dynamicAccessPermissions {
+		res.dynamicAccessPermissions[i] = *exp.dynamicAccessPermissions[i].DeepCopy()
 	}
-
-	res.workspaceAdminPermissions = make([]rbacv1.PolicyRule, len(exp.workspaceAdminPermissions))
-	for i := range exp.workspaceAdminPermissions {
-		res.workspaceAdminPermissions[i] = *exp.workspaceAdminPermissions[i].DeepCopy()
-	}
-
-	res.dynamicAccessPermissions = exp.dynamicAccessPermissions.DeepCopy()
 
 	return res
 }
 
-func apiGroupsWithResourcesToPolicyRuleGenerator(verbs []string) func(sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-	return func(elem sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-		return rbacv1.PolicyRule{
-			APIGroups: elem.APIGroups,
-			Resources: elem.Resources,
-			Verbs:     verbs,
-		}
+func defaultProjectPermissionsPerRole() map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule {
+	return map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule{
+		pwv1alpha1.ProjectRoleAdmin: {
+			{
+				APIGroups: []string{pwv1alpha1.GroupVersion.String()},
+				Resources: []string{"workspaces"},
+				Verbs:     utils.AllVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"secrets", "serviceaccounts"},
+				Verbs:     utils.AllVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"resourcequotas"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
+		},
+		pwv1alpha1.ProjectRoleView: {
+			{
+				APIGroups: []string{pwv1alpha1.GroupVersion.String()},
+				Resources: []string{"workspaces"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"serviceaccounts"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"resourcequotas"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+		},
 	}
 }
 
-var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
+func defaultWorkspacePermissionsPerRole() map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule {
+	return map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule{
+		pwv1alpha1.WorkspaceRoleAdmin: {
+			{
+				APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+				Resources: []string{"managedcontrolplanev2s"},
+				Verbs:     utils.AllVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{
+					"secrets",
+					"configmaps",
+					"serviceaccounts",
+				},
+				Verbs: utils.AllVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"resourcequotas"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
+		},
+		pwv1alpha1.WorkspaceRoleView: {
+			{
+				APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+				Resources: []string{"managedcontrolplanev2s"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{
+					"secrets",
+					"configmaps",
+					"serviceaccounts",
+				},
+				Verbs: utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{corev1.GroupName},
+				Resources: []string{"resourcequotas"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+		},
+	}
+}
+
+var _ = Describe("ProjectWorkspaceConfig Controller Test", Serial, func() {
+
+	BeforeEach(func() {
+		sharedconfig.SupportV1 = false
+	})
 
 	It("should return default values for an empty config and no ServiceProviders", func() {
 		pwc, env := defaultTestSetup(filepath.Join("testdata", "test-01"))
 
 		expected := &expectedValues{}
 
-		expected.resourcesBlockingProjectDeletion = sharedconfig.BuiltinResourcesBlockingProjectDeletion
-		expected.resourcesBlockingWorkspaceDeletion = sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion
+		expected.resourcesBlockingProjectDeletion = sharedconfig.BuiltinResourcesBlockingProjectDeletion()
+		expected.resourcesBlockingWorkspaceDeletion = sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion()
 
-		verbs := []string{"get", "list", "watch"}
-		expected.projectViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		verbs = []string{"*"}
-		expected.projectAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
+		expected.projectPermissionsPerRole = defaultProjectPermissionsPerRole()
+		expected.workspacePermissionsPerRole = defaultWorkspacePermissionsPerRole()
 
-		expected.dynamicAccessPermissions = &clustersv1alpha1.TokenConfig{}
+		expected.validate(env, pwc)
+	})
+
+	It("should add the v1 resources, if v1 support is enabled", func() {
+		sharedconfig.SupportV1 = true
+		pwc, env := defaultTestSetup(filepath.Join("testdata", "test-01"), &metav1.APIResourceList{
+			GroupVersion: sharedconfig.OpenMCPV1ApiGroup + "/" + sharedconfig.OpenMCPV1ApiVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "managedcontrolplanes",
+					Group:      sharedconfig.OpenMCPV1ApiGroup,
+					Version:    sharedconfig.OpenMCPV1ApiVersion,
+					Kind:       "ManagedControlPlane",
+					Namespaced: true,
+				},
+				{
+					Name:       "clusteradmins",
+					Group:      sharedconfig.OpenMCPV1ApiGroup,
+					Version:    sharedconfig.OpenMCPV1ApiVersion,
+					Kind:       "ClusterAdmin",
+					Namespaced: true,
+				},
+			},
+		})
+
+		expected := &expectedValues{}
+
+		expected.resourcesBlockingProjectDeletion = sharedconfig.BuiltinResourcesBlockingProjectDeletion()
+		expected.resourcesBlockingWorkspaceDeletion = sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion()
+		// verify that the v1 resources are included
+		Expect(expected.resourcesBlockingWorkspaceDeletion).To(ContainElements(
+			sharedconfig.DeletionBlockingResource{
+				GroupVersionKind: metav1.GroupVersionKind{
+					Group:   sharedconfig.OpenMCPV1ApiGroup,
+					Version: sharedconfig.OpenMCPV1ApiVersion,
+					Kind:    "ManagedControlPlane",
+				},
+				Source: pwv1alpha1.SourceBuiltin,
+			},
+			sharedconfig.DeletionBlockingResource{
+				GroupVersionKind: metav1.GroupVersionKind{
+					Group:   sharedconfig.OpenMCPV1ApiGroup,
+					Version: sharedconfig.OpenMCPV1ApiVersion,
+					Kind:    "ClusterAdmin",
+				},
+				Source: pwv1alpha1.SourceBuiltin,
+			},
+		))
+
+		expected.projectPermissionsPerRole = defaultProjectPermissionsPerRole()
+		expected.workspacePermissionsPerRole = defaultWorkspacePermissionsPerRole()
+		// verify that the permissions for the v1 resources are included
+		for role, verbs := range utils.WorkspaceRolesWithVerbs() {
+			expected.workspacePermissionsPerRole[role] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[role],
+				rbacv1.PolicyRule{
+					APIGroups: []string{sharedconfig.OpenMCPV1ApiGroup},
+					Resources: []string{
+						"managedcontrolplanes",
+						"clusteradmins",
+					},
+					Verbs: verbs,
+				},
+			)
+		}
+
+		expected.dynamicAccessPermissions = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{sharedconfig.OpenMCPV1ApiGroup},
+				Resources: []string{
+					"managedcontrolplanes",
+					"managedcontrolplanes/status",
+					"clusteradmins",
+					"clusteradmins/status",
+				},
+				Verbs: utils.ReadOnlyVerbs(),
+			},
+		}
 
 		expected.validate(env, pwc)
 	})
@@ -287,17 +494,17 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 			GroupVersion: "v1",
 			APIResources: []metav1.APIResource{
 				{
-					Name:       "secrets",
+					Name:       "services",
 					Group:      "",
 					Version:    "v1",
-					Kind:       "Secret",
+					Kind:       "Service",
 					Namespaced: true,
 				},
 				{
-					Name:       "configmaps",
+					Name:       "pods",
 					Group:      "",
 					Version:    "v1",
-					Kind:       "ConfigMap",
+					Kind:       "Pod",
 					Namespaced: true,
 				},
 			},
@@ -305,59 +512,49 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 
 		expected := &expectedValues{}
 
-		expected.resourcesBlockingProjectDeletion = sharedconfig.BuiltinResourcesBlockingProjectDeletion
-		expected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion...)
+		expected.resourcesBlockingProjectDeletion = sharedconfig.BuiltinResourcesBlockingProjectDeletion()
+		expected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion()...)
 		expected.resourcesBlockingWorkspaceDeletion = append(expected.resourcesBlockingWorkspaceDeletion,
 			sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: metav1.GroupVersionKind{
 					Group:   "",
-					Kind:    "ConfigMap",
+					Kind:    "Service",
 					Version: "v1",
 				},
-				Source: fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, "dummy-1"),
+				Source: fmt.Sprintf("%s[%s]", pwv1alpha1.SourceServiceProviderPrefix, "dummy-1"),
 			},
 			sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: metav1.GroupVersionKind{
 					Group:   "",
-					Kind:    "Secret",
+					Kind:    "Pod",
 					Version: "v1",
 				},
-				Source: fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, "dummy-2"),
+				Source: fmt.Sprintf("%s[%s]", pwv1alpha1.SourceServiceProviderPrefix, "dummy-2"),
 			},
 		)
 
-		verbs := []string{"get", "list", "watch"}
-		expected.projectViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceViewerPermissions = append(expected.workspaceViewerPermissions,
+		expected.projectPermissionsPerRole = defaultProjectPermissionsPerRole()
+		expected.workspacePermissionsPerRole = defaultWorkspacePermissionsPerRole()
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin],
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
-				Verbs:     verbs,
+				Resources: []string{"services", "pods"},
+				Verbs:     utils.AllVerbs(),
 			},
 		)
-		verbs = []string{"*"}
-		expected.projectAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceAdminPermissions = append(expected.workspaceAdminPermissions,
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView],
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
-				Verbs:     verbs,
+				Resources: []string{"services", "pods"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		)
 
-		expected.dynamicAccessPermissions = &clustersv1alpha1.TokenConfig{
-			Permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{""},
-							Resources: []string{"configmaps", "configmaps/status", "secrets", "secrets/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
+		expected.dynamicAccessPermissions = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services", "services/status", "pods", "pods/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		}
 
@@ -419,82 +616,67 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 
 		expected := &expectedValues{}
 
-		cfg := &pwov1alpha1.ProjectWorkspaceConfig{}
+		cfg := &pwv1alpha1.ProjectWorkspaceConfig{}
 		err := env.Client(platformClusterID).Get(env.Ctx, client.ObjectKey{Name: providerName}, cfg)
 		Expect(err).ToNot(HaveOccurred())
 
-		expected.resourcesBlockingProjectDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingProjectDeletion...)
+		expected.resourcesBlockingProjectDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingProjectDeletion()...)
 		expected.resourcesBlockingProjectDeletion = append(expected.resourcesBlockingProjectDeletion, collections.ProjectSliceToSlice(cfg.Spec.Project.ResourcesBlockingDeletion, func(gvk metav1.GroupVersionKind) sharedconfig.DeletionBlockingResource {
 			return sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: gvk,
-				Source:           pwov1alpha1.SourceProjectWorkspaceConfig,
+				Source:           pwv1alpha1.SourceProjectWorkspaceConfig,
 			}
 		})...)
 
-		expected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion...)
+		expected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion()...)
 		expected.resourcesBlockingWorkspaceDeletion = append(expected.resourcesBlockingWorkspaceDeletion, collections.ProjectSliceToSlice(cfg.Spec.Workspace.ResourcesBlockingDeletion, func(gvk metav1.GroupVersionKind) sharedconfig.DeletionBlockingResource {
 			return sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: gvk,
-				Source:           pwov1alpha1.SourceProjectWorkspaceConfig,
+				Source:           pwv1alpha1.SourceProjectWorkspaceConfig,
 			}
 		})...)
 
-		verbs := []string{"get", "list", "watch"}
-		expected.projectViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.projectViewerPermissions = append(expected.projectViewerPermissions,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"mygroup.project"},
-				Resources: []string{"myprojectadditionalresources1"},
-				Verbs:     []string{"get", "update"},
-			},
-		)
-		expected.workspaceViewerPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceViewerPermissions = append(expected.workspaceViewerPermissions,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"mygroup.workspace"},
-				Resources: []string{"myworkspaceadditionalresources1", "myworkspaceadditionalresources2"},
-				Verbs:     []string{"list", "watch", "get"},
-			},
-		)
-
-		verbs = []string{"*"}
-		expected.projectAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.projectAdminPermissions = append(expected.projectAdminPermissions,
+		expected.projectPermissionsPerRole = defaultProjectPermissionsPerRole()
+		expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleAdmin] = sharedconfig.AppendPolicyRules(expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleAdmin],
 			rbacv1.PolicyRule{
 				APIGroups: []string{"mygroup.project"},
 				Resources: []string{"myprojectadditionalresources1", "myprojectadditionalresources2"},
 				Verbs:     []string{"get", "update"},
 			},
 		)
-		expected.workspaceAdminPermissions = collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, apiGroupsWithResourcesToPolicyRuleGenerator(verbs))
-		expected.workspaceAdminPermissions = append(expected.workspaceAdminPermissions,
+		expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleView] = sharedconfig.AppendPolicyRules(expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleView],
+			rbacv1.PolicyRule{
+				APIGroups: []string{"mygroup.project"},
+				Resources: []string{"myprojectadditionalresources1"},
+				Verbs:     []string{"get", "update"},
+			},
+		)
+		expected.workspacePermissionsPerRole = defaultWorkspacePermissionsPerRole()
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin],
 			rbacv1.PolicyRule{
 				APIGroups: []string{"mygroup.workspace"},
 				Resources: []string{"myworkspaceadditionalresources1", "myworkspaceadditionalresources2"},
-				Verbs:     verbs,
+				Verbs:     []string{"*"},
+			},
+		)
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView],
+			rbacv1.PolicyRule{
+				APIGroups: []string{"mygroup.workspace"},
+				Resources: []string{"myworkspaceadditionalresources1", "myworkspaceadditionalresources2"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		)
 
-		expected.dynamicAccessPermissions = &clustersv1alpha1.TokenConfig{
-			Permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{"mygroup.project"},
-							Resources: []string{"myprojectblockingresources", "myprojectblockingresources/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{"mygroup.workspace"},
-							Resources: []string{"myworkspaceblockingresources1", "myworkspaceblockingresources1/status", "myworkspaceblockingresources2", "myworkspaceblockingresources2/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
+		expected.dynamicAccessPermissions = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"mygroup.project"},
+				Resources: []string{"myprojectblockingresources", "myprojectblockingresources/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{"mygroup.workspace"},
+				Resources: []string{"myworkspaceblockingresources1", "myworkspaceblockingresources1/status", "myworkspaceblockingresources2", "myworkspaceblockingresources2/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		}
 
@@ -556,142 +738,98 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 			GroupVersion: "v1",
 			APIResources: []metav1.APIResource{
 				{
-					Name:       "secrets",
+					Name:       "services",
 					Group:      "",
 					Version:    "v1",
-					Kind:       "Secret",
+					Kind:       "Service",
 					Namespaced: true,
 				},
 				{
-					Name:       "configmaps",
+					Name:       "pods",
 					Group:      "",
 					Version:    "v1",
-					Kind:       "ConfigMap",
+					Kind:       "Pod",
 					Namespaced: true,
 				},
 			},
 		})
 
-		cfg := &pwov1alpha1.ProjectWorkspaceConfig{}
+		cfg := &pwv1alpha1.ProjectWorkspaceConfig{}
 		err := env.Client(platformClusterID).Get(env.Ctx, client.ObjectKey{Name: providerName}, cfg)
 		Expect(err).ToNot(HaveOccurred())
 
 		originallyExpected := &expectedValues{}
 
-		originallyExpected.resourcesBlockingProjectDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingProjectDeletion...)
+		originallyExpected.resourcesBlockingProjectDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingProjectDeletion()...)
 		originallyExpected.resourcesBlockingProjectDeletion = append(originallyExpected.resourcesBlockingProjectDeletion, collections.ProjectSliceToSlice(cfg.Spec.Project.ResourcesBlockingDeletion, func(gvk metav1.GroupVersionKind) sharedconfig.DeletionBlockingResource {
 			return sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: gvk,
-				Source:           pwov1alpha1.SourceProjectWorkspaceConfig,
+				Source:           pwv1alpha1.SourceProjectWorkspaceConfig,
 			}
 		})...)
 
-		originallyExpected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion...)
+		originallyExpected.resourcesBlockingWorkspaceDeletion = append([]sharedconfig.DeletionBlockingResource{}, sharedconfig.BuiltinResourcesBlockingWorkspaceDeletion()...)
 		originallyExpected.resourcesBlockingWorkspaceDeletion = append(originallyExpected.resourcesBlockingWorkspaceDeletion, collections.ProjectSliceToSlice(cfg.Spec.Workspace.ResourcesBlockingDeletion, func(gvk metav1.GroupVersionKind) sharedconfig.DeletionBlockingResource {
 			return sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: gvk,
-				Source:           pwov1alpha1.SourceProjectWorkspaceConfig,
+				Source:           pwv1alpha1.SourceProjectWorkspaceConfig,
 			}
 		})...)
 		originallyExpected.resourcesBlockingWorkspaceDeletion = append(originallyExpected.resourcesBlockingWorkspaceDeletion,
 			sharedconfig.DeletionBlockingResource{
 				GroupVersionKind: metav1.GroupVersionKind{
 					Group:   "",
-					Kind:    "ConfigMap",
+					Kind:    "Service",
 					Version: "v1",
 				},
-				Source: fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, "dummy-1"),
+				Source: fmt.Sprintf("%s[%s]", pwv1alpha1.SourceServiceProviderPrefix, "dummy-1"),
 			},
 		)
 
-		originallyExpected.projectViewerPermissions = []rbacv1.PolicyRule{}
-		originallyExpected.projectViewerPermissions = append(originallyExpected.projectViewerPermissions, collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, func(elem sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-			return rbacv1.PolicyRule{
-				APIGroups: elem.APIGroups,
-				Resources: elem.Resources,
-				Verbs:     []string{"get", "list", "watch"},
-			}
-		})...)
-
-		originallyExpected.projectAdminPermissions = []rbacv1.PolicyRule{
-			{
+		originallyExpected.projectPermissionsPerRole = defaultProjectPermissionsPerRole()
+		originallyExpected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleAdmin] = sharedconfig.AppendPolicyRules(originallyExpected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleAdmin],
+			rbacv1.PolicyRule{
 				APIGroups: []string{"mygroup.project"},
 				Resources: []string{"myprojectadditionalresources1", "myprojectadditionalresources2"},
 				Verbs:     []string{"get", "update"},
 			},
-		}
-		originallyExpected.projectAdminPermissions = append(originallyExpected.projectAdminPermissions, collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleProjectResources, func(elem sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-			return rbacv1.PolicyRule{
-				APIGroups: elem.APIGroups,
-				Resources: elem.Resources,
-				Verbs:     []string{"*"},
-			}
-		})...)
-
-		originallyExpected.workspaceViewerPermissions = []rbacv1.PolicyRule{
-			{
+		)
+		originallyExpected.workspacePermissionsPerRole = defaultWorkspacePermissionsPerRole()
+		originallyExpected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin] = sharedconfig.AppendPolicyRules(originallyExpected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin],
+			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get", "list", "watch"},
+				Resources: []string{"services"},
+				Verbs:     utils.AllVerbs(),
 			},
-		}
-		originallyExpected.workspaceViewerPermissions = append(originallyExpected.workspaceViewerPermissions, collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, func(elem sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-			return rbacv1.PolicyRule{
-				APIGroups: elem.APIGroups,
-				Resources: elem.Resources,
-				Verbs:     []string{"get", "list", "watch"},
-			}
-		})...)
-
-		originallyExpected.workspaceAdminPermissions = []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"*"},
-			},
-			{
+			rbacv1.PolicyRule{
 				APIGroups: []string{"mygroup.workspace"},
 				Resources: []string{"myworkspaceadditionalresources1", "myworkspaceadditionalresources2"},
 				Verbs:     []string{"*"},
 			},
-		}
-		originallyExpected.workspaceAdminPermissions = append(originallyExpected.workspaceAdminPermissions, collections.ProjectSliceToSlice(sharedconfig.BuiltinPermissibleWorkspaceResources, func(elem sharedconfig.APIGroupsWithResources) rbacv1.PolicyRule {
-			return rbacv1.PolicyRule{
-				APIGroups: elem.APIGroups,
-				Resources: elem.Resources,
-				Verbs:     []string{"*"},
-			}
-		})...)
+		)
+		originallyExpected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView] = sharedconfig.AppendPolicyRules(originallyExpected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView],
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"services"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+		)
 
-		originallyExpected.dynamicAccessPermissions = &clustersv1alpha1.TokenConfig{
-			Permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{"mygroup.project"},
-							Resources: []string{"myprojectblockingresources", "myprojectblockingresources/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{"mygroup.workspace"},
-							Resources: []string{"myworkspaceblockingresources1", "myworkspaceblockingresources1/status", "myworkspaceblockingresources2", "myworkspaceblockingresources2/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
-				{
-					Rules: []rbacv1.PolicyRule{
-						{
-							APIGroups: []string{""},
-							Resources: []string{"configmaps", "configmaps/status"},
-							Verbs:     []string{"get", "list", "watch"},
-						},
-					},
-				},
+		originallyExpected.dynamicAccessPermissions = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"mygroup.project"},
+				Resources: []string{"myprojectblockingresources", "myprojectblockingresources/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{"mygroup.workspace"},
+				Resources: []string{"myworkspaceblockingresources1", "myworkspaceblockingresources1/status", "myworkspaceblockingresources2", "myworkspaceblockingresources2/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services", "services/status"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		}
 
@@ -706,7 +844,7 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 			{
 				Group:   "",
 				Version: "v1",
-				Kind:    "Secret",
+				Kind:    "Pod",
 			},
 		}
 		Expect(env.Client(platformClusterID).Status().Update(env.Ctx, sp2)).To(Succeed())
@@ -715,11 +853,28 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 		// as well as modify the AccessRequest to contain get permissions for this resource
 		expected.resourcesBlockingWorkspaceDeletion = append(expected.resourcesBlockingWorkspaceDeletion, sharedconfig.DeletionBlockingResource{
 			GroupVersionKind: sp2.Status.Resources[0],
-			Source:           fmt.Sprintf("%s[%s]", pwov1alpha1.SourceServiceProviderPrefix, sp2.Name),
+			Source:           fmt.Sprintf("%s[%s]", pwv1alpha1.SourceServiceProviderPrefix, sp2.Name),
 		})
-		expected.workspaceViewerPermissions[0].Resources = append(expected.workspaceViewerPermissions[0].Resources, "secrets")
-		expected.workspaceAdminPermissions[0].Resources = append(expected.workspaceAdminPermissions[0].Resources, "secrets")
-		expected.dynamicAccessPermissions.Permissions[2].Rules[0].Resources = append(expected.dynamicAccessPermissions.Permissions[2].Rules[0].Resources, "secrets", "secrets/status")
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleAdmin],
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     utils.AllVerbs(),
+			},
+		)
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView],
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     utils.ReadOnlyVerbs(),
+			},
+		)
+
+		expected.dynamicAccessPermissions = append(expected.dynamicAccessPermissions, rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"pods", "pods/status"},
+			Verbs:     utils.ReadOnlyVerbs(),
+		})
 		expected.validate(env, pwc)
 
 		// removing the ServiceProvider should undo that change
@@ -728,32 +883,28 @@ var _ = Describe("ProjectWorkspaceConfig Controller Test", func() {
 
 		expected = originallyExpected.clone()
 		// modifying the config by adding project and workspace viewer permissions should modify the permissions accordingly
-		cfg.Spec.Project.AdditionalPermissions[pwov1alpha1.ProjectRoleView] = []rbacv1.PolicyRule{
+		cfg.Spec.Project.AdditionalPermissions[pwv1alpha1.ProjectRoleView] = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"mygroup.project"},
 				Resources: []string{"myprojectadditionalresources1"},
 				Verbs:     []string{"get", "update"},
 			},
 		}
-		cfg.Spec.Workspace.AdditionalPermissions[pwov1alpha1.WorkspaceRoleView] = []rbacv1.PolicyRule{
+		cfg.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView] = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"mygroup.workspace"},
 				Resources: []string{"myworkspaceadditionalresources1", "myworkspaceadditionalresources2"},
-				Verbs:     []string{"list", "watch", "get"},
+				Verbs:     utils.ReadOnlyVerbs(),
 			},
 		}
 		Expect(env.Client(platformClusterID).Update(env.Ctx, cfg)).To(Succeed())
-		expected.projectViewerPermissions = append([]rbacv1.PolicyRule{
-			cfg.Spec.Project.AdditionalPermissions[pwov1alpha1.ProjectRoleView][0],
-		}, expected.projectViewerPermissions...)
-		expected.workspaceViewerPermissions = append([]rbacv1.PolicyRule{
-			cfg.Spec.Workspace.AdditionalPermissions[pwov1alpha1.WorkspaceRoleView][0],
-		}, expected.workspaceViewerPermissions...)
+		expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleView] = sharedconfig.AppendPolicyRules(expected.projectPermissionsPerRole[pwv1alpha1.ProjectRoleView], cfg.Spec.Project.AdditionalPermissions[pwv1alpha1.ProjectRoleView]...)
+		expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView] = sharedconfig.AppendPolicyRules(expected.workspacePermissionsPerRole[pwv1alpha1.WorkspaceRoleView], cfg.Spec.Workspace.AdditionalPermissions[pwv1alpha1.WorkspaceRoleView]...)
 		expected.validate(env, pwc)
 
 		// removing the additional permissions again should undo that change
-		delete(cfg.Spec.Project.AdditionalPermissions, pwov1alpha1.ProjectRoleView)
-		delete(cfg.Spec.Workspace.AdditionalPermissions, pwov1alpha1.WorkspaceRoleView)
+		delete(cfg.Spec.Project.AdditionalPermissions, pwv1alpha1.ProjectRoleView)
+		delete(cfg.Spec.Workspace.AdditionalPermissions, pwv1alpha1.WorkspaceRoleView)
 		Expect(env.Client(platformClusterID).Update(env.Ctx, cfg)).To(Succeed())
 		originallyExpected.validate(env, pwc)
 	})
