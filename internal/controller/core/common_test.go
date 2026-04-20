@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	openmcpv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
+	openmcpv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
 	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
 
 	"github.com/stretchr/testify/assert"

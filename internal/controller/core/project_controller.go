@@ -17,7 +17,7 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 
-	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
 	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 

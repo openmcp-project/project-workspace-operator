@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/openmcp-project/platform-service-project-workspace/api/entities"
+	"github.com/openmcp-project/platform-service-project-workspace/api/v2/entities"
 )
 
 var (

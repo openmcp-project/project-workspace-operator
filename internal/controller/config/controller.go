@@ -32,8 +32,8 @@ import (
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
-	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
-	"github.com/openmcp-project/platform-service-project-workspace/api/install"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/api/v2/install"
 	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 

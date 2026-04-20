@@ -6,7 +6,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
 	github.com/openmcp-project/controller-utils v0.27.1
-	github.com/openmcp-project/platform-service-project-workspace/api v2.0.0
+	github.com/openmcp-project/platform-service-project-workspace/api/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.35.4
 	k8s.io/apimachinery v0.35.4
@@ -113,4 +113,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-replace github.com/openmcp-project/platform-service-project-workspace/api => ./api/
+replace github.com/openmcp-project/platform-service-project-workspace/api/v2 => ./api/
