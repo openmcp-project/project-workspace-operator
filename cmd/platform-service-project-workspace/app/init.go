@@ -21,11 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/api/crds"
-	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
-	"github.com/openmcp-project/project-workspace-operator/internal/dns"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/api/v2/crds"
+	providerscheme "github.com/openmcp-project/platform-service-project-workspace/api/v2/install"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/core"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/dns"
 )
 
 func NewInitCommand(so *SharedOptions) *cobra.Command {

@@ -17,10 +17,10 @@ import (
 
 var (
 	e2eClusterName = getEnv("E2E_CLUSTER_NAME", envconf.RandomName("openmcp-pwo-e2e", 16))
-	e2eUUTImage    = getEnv("E2E_UUT_IMAGE", "project-workspace-operator")
+	e2eUUTImage    = getEnv("E2E_UUT_IMAGE", "platform-service-project-workspace")
 	e2eUUTTag      = getEnv("E2E_UUT_VERSION", "dev")
 	e2eUUTImageTag = fmt.Sprintf("%s:%s", e2eUUTImage, e2eUUTTag)
-	e2eUUTChart    = getEnv("E2E_UUT_CHART", "../../charts/project-workspace-operator")
+	e2eUUTChart    = getEnv("E2E_UUT_CHART", "../../charts/platform-service-project-workspace")
 )
 
 func TestMain(m *testing.M) {
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 			func(ctx context.Context, config *envconf.Config) (context.Context, error) {
 				manager := helm.New(config.KubeconfigFile())
 				err := manager.RunInstall(
-					helm.WithName("project-workspace-operator"),
+					helm.WithName("platform-service-project-workspace"),
 					helm.WithChart(e2eUUTChart),
 					helm.WithArgs(
 						"--set", fmt.Sprintf("image.repository=%s", e2eUUTImage),

@@ -22,9 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
+	sharedconfig "github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 const (

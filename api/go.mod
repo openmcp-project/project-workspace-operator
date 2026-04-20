@@ -1,4 +1,4 @@
-module github.com/openmcp-project/project-workspace-operator/api
+module github.com/openmcp-project/platform-service-project-workspace/api/v2
 
 go 1.26.2
 

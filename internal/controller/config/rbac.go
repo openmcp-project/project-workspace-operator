@@ -10,7 +10,7 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 func NewRBACSetup(onboardingClient client.Client, providerName string) *RBACSetup {

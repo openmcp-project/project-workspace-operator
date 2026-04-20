@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openmcp-project/project-workspace-operator/cmd/project-workspace-operator/app"
+	"github.com/openmcp-project/platform-service-project-workspace/cmd/platform-service-project-workspace/app"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 set -e
 
-IMG="project-workspace-operator:dev"
+IMG="platform-service-project-workspace:dev"
 
 if [ ! -e "Makefile" ]; then
     echo "Please run this script from the project root."
@@ -14,5 +14,5 @@ fi
 make docker-build IMG=$IMG
 kind load docker-image $IMG
 make install
-kubectl delete deployment -n project-workspace-operator-system project-workspace-operator-controller-manager || true
+kubectl delete deployment -n platform-service-project-workspace-system platform-service-project-workspace-controller-manager || true
 make deploy IMG=$IMG

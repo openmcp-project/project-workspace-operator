@@ -17,11 +17,11 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/api/install"
-	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core/config"
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/api/v2/install"
+	sharedconfig "github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/core/config"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 var (

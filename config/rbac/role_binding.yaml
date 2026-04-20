@@ -5,8 +5,8 @@ metadata:
     app.kubernetes.io/name: clusterrolebinding
     app.kubernetes.io/instance: manager-rolebinding
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/created-by: project-workspace-operator
-    app.kubernetes.io/part-of: project-workspace-operator
+    app.kubernetes.io/created-by: platform-service-project-workspace
+    app.kubernetes.io/part-of: platform-service-project-workspace
     app.kubernetes.io/managed-by: kustomize
   name: manager-rolebinding
 roleRef:

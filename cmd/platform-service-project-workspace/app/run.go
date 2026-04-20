@@ -26,11 +26,11 @@ import (
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	providerscheme "github.com/openmcp-project/project-workspace-operator/api/install"
-	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/core"
-	pwwebhooks "github.com/openmcp-project/project-workspace-operator/internal/webhooks"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
+	providerscheme "github.com/openmcp-project/platform-service-project-workspace/api/v2/install"
+	sharedconfig "github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/core"
+	pwwebhooks "github.com/openmcp-project/platform-service-project-workspace/internal/webhooks"
 )
 
 var setupLog logging.Logger

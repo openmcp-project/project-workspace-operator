@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	sharedconfig "github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	sharedconfig "github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
 )
 
 func (o *SharedOptions) PrintRaw(cmd *cobra.Command) {

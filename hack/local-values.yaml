@@ -1,4 +1,4 @@
-fullnameOverride: project-workspace-operator
+fullnameOverride: platform-service-project-workspace
 
 manager:
   extraArgs: []
@@ -34,7 +34,7 @@ rbac:
           - "*"
 webhooks:
   memberOverrides:
-    memberOverridesName: project-workspace-operator-overrides
+    memberOverridesName: platform-service-project-workspace-overrides
     overrides:
       - kind: User
         name: kubernetes-admin
