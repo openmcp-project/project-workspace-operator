@@ -11,8 +11,8 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
 )
 
 const ProjectWebhookName = "project-webhook"
@@ -21,7 +21,7 @@ const ProjectWebhookName = "project-webhook"
 type ProjectWebhook struct {
 	client.Client
 
-	// Identity is the name of the entity (usually a service account) the project-workspace-operator uses to access the onboarding cluster.
+	// Identity is the name of the entity (usually a service account) the platform-service-project-workspace uses to access the onboarding cluster.
 	// It is required to exclude the operator's own identity from validation checks.
 	Identity          string
 	SharedInformation config.SharedInformation

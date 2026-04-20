@@ -15,9 +15,9 @@ import (
 
 	"github.com/openmcp-project/controller-utils/pkg/collections"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/internal/controller/config"
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/controller/config"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 func TestRBACSetup_EnsureResources(t *testing.T) {

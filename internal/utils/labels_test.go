@@ -10,7 +10,7 @@ import (
 
 	openmcpconst "github.com/openmcp-project/openmcp-operator/api/constants"
 
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 func TestSetManagementLabels(t *testing.T) {

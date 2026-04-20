@@ -5,8 +5,8 @@ version: 3
 #   API_DIRS: '{{.ROOT_DIR}}/api/core/v1alpha1/...'
 #   MANIFEST_OUT: '{{.ROOT_DIR}}/api/crds/manifests'
 #   CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/test/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
-#   COMPONENTS: 'project-workspace-operator'
-#   REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
+#   COMPONENTS: 'platform-service-project-workspace'
+#   REPO_URL: 'https://github.com/openmcp-project/platform-service-project-workspace'
 #   GENERATE_DOCS_INDEX: "true"
 
 includes:
@@ -19,10 +19,10 @@ includes:
       API_DIRS: '{{.ROOT_DIR}}/api/core/v1alpha1/...'
       MANIFEST_OUT: '{{.ROOT_DIR}}/api/crds/manifests'
       CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/core/v1alpha1/...'
-      COMPONENTS: 'project-workspace-operator'
-      CRDS_COMPONENTS: 'project-workspace-operator'
+      COMPONENTS: 'platform-service-project-workspace'
+      CRDS_COMPONENTS: 'platform-service-project-workspace'
       CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
-      REPO_URL: 'https://github.com/openmcp-project/project-workspace-operator'
+      REPO_URL: 'https://github.com/openmcp-project/platform-service-project-workspace'
       ENVTEST_REQUIRED: "true"
       CHART_COMPONENTS: "[]"
       GENERATE_DOCS_INDEX: "true"
@@ -44,7 +44,7 @@ tasks:
         metadata:
           name: project-workspace
         spec:
-          image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
+          image: ghcr.io/openmcp-project/images/platform-service-project-workspace:{{.VERSION}}
           verbosity: {{.VERBOSITY}}
         EOF
       silent: true
@@ -65,7 +65,7 @@ tasks:
         metadata:
           name: project-workspace
         spec:
-          image: ghcr.io/openmcp-project/images/project-workspace-operator:{{.VERSION}}
+          image: ghcr.io/openmcp-project/images/platform-service-project-workspace:{{.VERSION}}
           verbosity: {{.VERBOSITY}}
           runCommand:
           - run

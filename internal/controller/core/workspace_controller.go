@@ -19,8 +19,8 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 
-	pwv1alpha1 "github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1"
-	"github.com/openmcp-project/project-workspace-operator/internal/utils"
+	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1"
+	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
 )
 
 const WorkspaceControllerName = "workspace"

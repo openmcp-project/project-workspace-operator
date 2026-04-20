@@ -6,8 +6,8 @@ domain: openmcp.cloud
 layout:
 - go.kubebuilder.io/v4
 multigroup: true
-projectName: project-workspace-operator
-repo: github.com/openmcp-project/project-workspace-operator
+projectName: platform-service-project-workspace
+repo: github.com/openmcp-project/platform-service-project-workspace
 resources:
 - api:
     crdVersion: v1
@@ -15,7 +15,7 @@ resources:
   domain: openmcp.cloud
   group: core
   kind: Project
-  path: github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1
+  path: github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1
   version: v1alpha1
   webhooks:
     defaulting: true
@@ -28,7 +28,7 @@ resources:
   domain: openmcp.cloud
   group: core
   kind: Workspace
-  path: github.com/openmcp-project/project-workspace-operator/api/core/v1alpha1
+  path: github.com/openmcp-project/platform-service-project-workspace/api/core/v1alpha1
   version: v1alpha1
   webhooks:
     defaulting: true
