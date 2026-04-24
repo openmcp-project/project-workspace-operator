@@ -125,7 +125,7 @@ func defaultTestSetup(testDirPath string, knownAPIResources ...*metav1.APIResour
 		}).
 		WithDynamicObjectsWithStatus(platformClusterID, &clustersv1alpha1.AccessRequest{}).
 		WithReconcilerConstructor(pwcRec, func(c ...client.Client) reconcile.Reconciler {
-			pwc, err := sharedconfig.NewPWOConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace)
+			pwc, err := sharedconfig.NewPWConfigController(providerName, clusters.NewTestClusterFromClient(platformClusterID, c[0]), clusters.NewTestClusterFromClient(onboardingClusterID, c[1]), &commonapi.ObjectReference{Name: "onboarding", Namespace: "default"}, nil, podNamespace)
 			Expect(err).ToNot(HaveOccurred(), "failed to create PWOConfigController")
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestReadiness, advanced.FakeAccessRequestReadiness())
 			pwc.Car.WithFakingCallback(advanced.FakingCallback_WaitingForAccessRequestDeletion, advanced.FakeAccessRequestDeletion([]string{"clusterprovider"}, nil))

@@ -314,7 +314,7 @@ func (o *RunOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to get cluster request for onboarding cluster: %w", err)
 	}
 
-	cfgCtrl, err := sharedconfig.NewPWOConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil, podNamespace)
+	cfgCtrl, err := sharedconfig.NewPWConfigController(o.ProviderName, o.PlatformCluster, onboardingCluster, cr.Status.Cluster, nil, podNamespace)
 	if err != nil {
 		return fmt.Errorf("unable to create ProjectWorkspaceConfig controller: %w", err)
 	}

@@ -68,14 +68,14 @@ type PWOConfigController struct {
 	missingConfig                  bool
 }
 
-// NewPWOConfigController creates a new PWOConfigController.
+// NewPWConfigController creates a new PWOConfigController.
 // This controller has the following responsibilities:
 // - It watches the ProjectWorkspaceConfig resource belonging to this instance of the PlatformService PWO and reloads it on changes.
 // - It watches ServiceProvider resources for their registered resource types in their status and updates permissions and blocking resources accordingly.
 // - It can trigger project and workspace reconciliations via the passed-in channels if the config changes in a way that requires it.
 // - It implements the SharedInformation interface, so that other controllers can query it for the current configuration.
 // - It reconciles the OnboardingCluster AccessRequests for the project and workspace controllers to ensure they can always fetch the the resources that are supposed to block deletion.
-func NewPWOConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder, podNamespace string) (*PWOConfigController, error) {
+func NewPWConfigController(providerName string, platformCluster *clusters.Cluster, onboardingClusterStatic *clusters.Cluster, onboardingClusterRef *commonapi.ObjectReference, rec record.EventRecorder, podNamespace string) (*PWOConfigController, error) {
 	scheme := install.InstallOperatorAPIsOnboarding(runtime.NewScheme())
 	obRef := advanced.StaticReferenceGenerator(onboardingClusterRef)
 	var ds discovery.DiscoveryInterface
