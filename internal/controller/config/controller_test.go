@@ -279,7 +279,7 @@ func defaultProjectPermissionsPerRole() map[pwv1alpha1.ProjectMemberRole][]rbacv
 	return map[pwv1alpha1.ProjectMemberRole][]rbacv1.PolicyRule{
 		pwv1alpha1.ProjectRoleAdmin: {
 			{
-				APIGroups: []string{pwv1alpha1.GroupVersion.String()},
+				APIGroups: []string{pwv1alpha1.GroupName},
 				Resources: []string{"workspaces"},
 				Verbs:     utils.AllVerbs(),
 			},
@@ -306,7 +306,7 @@ func defaultProjectPermissionsPerRole() map[pwv1alpha1.ProjectMemberRole][]rbacv
 		},
 		pwv1alpha1.ProjectRoleView: {
 			{
-				APIGroups: []string{pwv1alpha1.GroupVersion.String()},
+				APIGroups: []string{pwv1alpha1.GroupName},
 				Resources: []string{"workspaces"},
 				Verbs:     utils.ReadOnlyVerbs(),
 			},
@@ -333,7 +333,7 @@ func defaultWorkspacePermissionsPerRole() map[pwv1alpha1.WorkspaceMemberRole][]r
 	return map[pwv1alpha1.WorkspaceMemberRole][]rbacv1.PolicyRule{
 		pwv1alpha1.WorkspaceRoleAdmin: {
 			{
-				APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+				APIGroups: []string{openmcpcorev2alpha1.GroupName},
 				Resources: []string{"managedcontrolplanev2s"},
 				Verbs:     utils.AllVerbs(),
 			},
@@ -364,7 +364,7 @@ func defaultWorkspacePermissionsPerRole() map[pwv1alpha1.WorkspaceMemberRole][]r
 		},
 		pwv1alpha1.WorkspaceRoleView: {
 			{
-				APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+				APIGroups: []string{openmcpcorev2alpha1.GroupName},
 				Resources: []string{"managedcontrolplanev2s"},
 				Verbs:     utils.ReadOnlyVerbs(),
 			},
