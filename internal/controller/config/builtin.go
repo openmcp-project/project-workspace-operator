@@ -68,7 +68,7 @@ func BuiltinResourcesBlockingWorkspaceDeletion() []DeletionBlockingResource {
 func BuiltinPermissibleProjectResources() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{pwv1alpha1.GroupVersion.String()},
+			APIGroups: []string{pwv1alpha1.GroupName},
 			Resources: []string{"workspaces"},
 		},
 		{
@@ -105,7 +105,7 @@ func BuiltinPermissibleProjectResourcesAdminOnly() []rbacv1.PolicyRule {
 func BuiltinPermissibleWorkspaceResources() []rbacv1.PolicyRule {
 	res := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{openmcpcorev2alpha1.GroupVersion.String()},
+			APIGroups: []string{openmcpcorev2alpha1.GroupName},
 			Resources: []string{"managedcontrolplanev2s"},
 		},
 		{
