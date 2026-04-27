@@ -13,11 +13,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
+	apiconst "github.com/openmcp-project/openmcp-operator/api/constants"
 
 	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
 	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
@@ -85,6 +89,23 @@ func (r *WorkspaceReconciler) reconcile(ctx context.Context, req ctrl.Request) (
 			return sr.StopRequeue()
 		}
 		return sr.ReturnError(fmt.Errorf("error fetching workspace: %w", err))
+	}
+
+	// handle operation annotation
+	if workspace.GetAnnotations() != nil {
+		op, ok := workspace.GetAnnotations()[apiconst.OperationAnnotation]
+		if ok {
+			switch op {
+			case apiconst.OperationAnnotationValueIgnore:
+				log.Info("Ignoring resource due to ignore operation annotation")
+				return sr.StopRequeue()
+			case apiconst.OperationAnnotationValueReconcile:
+				log.Debug("Removing reconcile operation annotation from resource")
+				if err := ctrlutils.EnsureAnnotation(ctx, r.OnboardingStatic.Client(), workspace, apiconst.OperationAnnotation, "", true, ctrlutils.DELETE); err != nil {
+					return sr.ReturnError(fmt.Errorf("error removing operation annotation: %w", err))
+				}
+			}
+		}
 	}
 
 	project, err := r.getProjectByNamespace(ctx, workspace.Namespace)
@@ -339,7 +360,19 @@ func (r *WorkspaceReconciler) deleteClusterRole(ctx context.Context, project *pw
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&pwv1alpha1.Workspace{}).
+		For(&pwv1alpha1.Workspace{}, builder.WithPredicates(
+			predicate.And(
+				predicate.Or(
+					predicate.GenerationChangedPredicate{},
+					ctrlutils.DeletionTimestampChangedPredicate{},
+					ctrlutils.GotAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueReconcile),
+					ctrlutils.LostAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueIgnore),
+				),
+				predicate.Not(
+					ctrlutils.HasAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueIgnore),
+				),
+			),
+		)).
 		Complete(r)
 }
 

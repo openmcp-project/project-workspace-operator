@@ -11,11 +11,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
+	apiconst "github.com/openmcp-project/openmcp-operator/api/constants"
 
 	pwv1alpha1 "github.com/openmcp-project/platform-service-project-workspace/api/v2/core/v1alpha1"
 	"github.com/openmcp-project/platform-service-project-workspace/internal/utils"
@@ -79,6 +83,23 @@ func (r *ProjectReconciler) reconcile(ctx context.Context, req ctrl.Request) (ct
 			return sr.StopRequeue()
 		}
 		return sr.ReturnError(fmt.Errorf("error fetching project: %w", err))
+	}
+
+	// handle operation annotation
+	if project.GetAnnotations() != nil {
+		op, ok := project.GetAnnotations()[apiconst.OperationAnnotation]
+		if ok {
+			switch op {
+			case apiconst.OperationAnnotationValueIgnore:
+				log.Info("Ignoring resource due to ignore operation annotation")
+				return sr.StopRequeue()
+			case apiconst.OperationAnnotationValueReconcile:
+				log.Debug("Removing reconcile operation annotation from resource")
+				if err := ctrlutils.EnsureAnnotation(ctx, r.OnboardingStatic.Client(), project, apiconst.OperationAnnotation, "", true, ctrlutils.DELETE); err != nil {
+					return sr.ReturnError(fmt.Errorf("error removing operation annotation: %w", err))
+				}
+			}
+		}
 	}
 
 	projectNamespace := &corev1.Namespace{
@@ -168,7 +189,19 @@ func (r *ProjectReconciler) reconcile(ctx context.Context, req ctrl.Request) (ct
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&pwv1alpha1.Project{}).
+		For(&pwv1alpha1.Project{}, builder.WithPredicates(
+			predicate.And(
+				predicate.Or(
+					predicate.GenerationChangedPredicate{},
+					ctrlutils.DeletionTimestampChangedPredicate{},
+					ctrlutils.GotAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueReconcile),
+					ctrlutils.LostAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueIgnore),
+				),
+				predicate.Not(
+					ctrlutils.HasAnnotationPredicate(apiconst.OperationAnnotation, apiconst.OperationAnnotationValueIgnore),
+				),
+			),
+		)).
 		Complete(r)
 }
 
