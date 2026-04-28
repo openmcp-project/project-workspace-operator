@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/onsi/ginkgo/v2 v2.28.1
-	github.com/onsi/gomega v1.39.1
+	github.com/onsi/gomega v1.40.0
 	github.com/openmcp-project/controller-utils v0.27.1
 	github.com/openmcp-project/platform-service-project-workspace/api/v2 v2.0.0
 	github.com/stretchr/testify v1.11.1
